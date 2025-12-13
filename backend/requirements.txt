@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pydantic
+apscheduler
+spotdl
+yt-dlp

@@ -1,0 +1,3 @@
+textual
+rich==13.9.4
+requests

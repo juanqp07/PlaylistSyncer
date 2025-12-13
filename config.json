@@ -1,0 +1,28 @@
+{
+  "default_tool": "spotdl",
+  "output_dir": "./downloads",
+  "format": "opus",
+  "bitrate": "128k",
+  "concurrency": 2,
+  "ffmpeg_path": "ffmpeg",
+  "spotdl_extra_args": [],
+  "ytdlp_extra_args": [
+    "-x",
+    "--audio-format",
+    "best"
+  ],
+  "postprocess": {
+    "convert_with_ffmpeg": true,
+    "normalize_audio": false
+  },
+  "filename_template": "{artist} - {title}.{ext}",
+  "notify": {
+    "enabled": false,
+    "method": "ntfy",
+    "ntfy_topic": ""
+  },
+  "retry": {
+    "attempts": 2,
+    "backoff_seconds": 5
+  }
+}
