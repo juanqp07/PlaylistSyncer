@@ -26,17 +26,8 @@ A self-hosted, Dockerized music downloader and manager. Automatically syncs play
     cd opusvault
     ```
 
-2.  **Configure Environment**:
-    Copy the example environment file and add your Spotify credentials (required to avoid rate limits).
-    ```bash
-    cp env.example .env
-    ```
-    Edit `.env` and fill in your keys:
-    ```ini
-    SPOTIFY_CLIENT_ID=your_id
-    SPOTIFY_CLIENT_SECRET=your_secret
-    ```
-    > ℹ️ *You can get these keys from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).*
+2.  **Configuración (Opcional)**:
+    Puedes ajustar `config.json` para cambiar el formato de audio, bitrate, etc. Por defecto ya viene configurado para un buen equilibrio calidad/peso.
 
 3.  **Start the Application**:
     ```bash

@@ -32,24 +32,6 @@ async function loadConfig() {
         }
         document.getElementById('conf-concurrency').value = data.concurrency || 2;
         document.getElementById('conf-format').value = data.format || "opus";
-        document.getElementById('conf-bitrate').value = data.bitrate || "128k";
-        document.getElementById('conf-lyrics').value = data.lyrics_provider || "genius";
-
-        if (data.env_auth_set) {
-            const idInput = document.getElementById('conf-client-id');
-            const secInput = document.getElementById('conf-client-secret');
-
-            idInput.value = "********";
-            idInput.disabled = true;
-            idInput.title = "Configurado por variable de entorno (.env)";
-
-            secInput.value = "********";
-            secInput.disabled = true;
-            secInput.title = "Configurado por variable de entorno (.env)";
-        } else {
-            document.getElementById('conf-client-id').value = data.spotify_client_id || "";
-            document.getElementById('conf-client-secret').value = data.spotify_client_secret || "";
-        }
 
         setOnline(true);
     } catch (e) {
@@ -65,10 +47,6 @@ async function saveConfig() {
         output_dir: document.getElementById('conf-output').value,
         concurrency: parseInt(document.getElementById('conf-concurrency').value),
         format: document.getElementById('conf-format').value,
-        bitrate: document.getElementById('conf-bitrate').value,
-        lyrics_provider: document.getElementById('conf-lyrics').value,
-        spotify_client_id: document.getElementById('conf-client-id').value,
-        spotify_client_secret: document.getElementById('conf-client-secret').value,
     };
 
     try {
@@ -108,7 +86,7 @@ async function loadPlaylists() {
                     <div style="font-size:0.8rem; color:var(--text-muted)">${pl.urls.length} URL(s)</div>
                 </div>
                 <div class="actions">
-                     <button class="btn btn-secondary" onclick="viewTracks('${pl.id}', '${pl.name}')">Ver Tracks</button>
+                     <button class="btn btn-secondary" onclick="viewTracks('${pl.id}', '${pl.name.replace(/'/g, "\\'")}')">Ver Tracks</button>
                      <button class="btn btn-danger" onclick="deletePlaylist('${pl.id}')">Eliminar</button>
                 </div>
             `;
@@ -190,22 +168,95 @@ async function deletePlaylist(id) {
 
 // Run
 async function runNow() {
-    const btn = document.getElementById('btn-run');
+    const btn = document.getElementById('btn-download');
     const status = document.getElementById('run-status');
+
+    // Show status container immediately
+    document.getElementById('status-container').style.display = 'block';
+
+    let hasStarted = false;
+    let attempts = 0;
+
+    // Start polling status
+    const pollInterval = setInterval(async () => {
+        try {
+            const res = await fetch(`${API_URL}/status`);
+            const data = await res.json();
+
+            const statusMap = {
+                'idle': 'Inactivo',
+                'starting': 'Iniciando...',
+                'processing': 'Procesando...',
+                'downloading': 'Descargando',
+                'retrying': 'Reintentando (Límite API)',
+                'error': 'Error'
+            };
+
+            document.getElementById('status-state').textContent = statusMap[data.state] || data.state;
+            document.getElementById('status-song').textContent = data.current_song || "-";
+            // Show progress: 10 / 150
+            document.getElementById('status-total').textContent = `${data.downloaded} / ${data.total_songs || "?"}`;
+
+            // Check if process has started
+            if (data.state !== 'idle') {
+                hasStarted = true;
+                // Clear "Request sent" message once we see movement
+                if (status.textContent === "Solicitud enviada...") {
+                    status.textContent = "";
+                }
+            }
+
+            attempts++;
+
+            // Completion logic
+            // If we have started seeing activity, and now it is idle again -> Finished
+            if (hasStarted && data.state === 'idle') {
+                clearInterval(pollInterval);
+                btn.disabled = false;
+
+                // Update header
+                status.textContent = "¡Completado! 🎉";
+                status.style.color = "var(--success)";
+                document.getElementById('status-state').textContent = "Finalizado";
+
+                // Clear stats details as requested to avoid "Actual: -" ugliness
+                document.getElementById('status-song').parentElement.style.opacity = '0.3';
+                document.getElementById('status-song').textContent = "-";
+
+                setTimeout(() => {
+                    status.textContent = "";
+                    document.getElementById('status-container').style.display = 'none'; // Hide entirely after a while
+                    document.getElementById('status-song').parentElement.style.opacity = '1'; // Reset for next time
+                }, 5000);
+            }
+
+            // Safety: if 10 seconds passed and still idle, assume it failed to start or finished instantly
+            if (!hasStarted && attempts > 20) { // 20 * 0.5s = 10s
+                clearInterval(pollInterval);
+                btn.disabled = false;
+                status.textContent = "No se detectó actividad (o finalizó muy rápido).";
+                setTimeout(() => status.textContent = "", 5000);
+            }
+
+        } catch (e) { console.error(e); }
+    }, 500);
+
     try {
         btn.disabled = true;
+
+        // Trigger run
         await fetch(`${API_URL}/run`, { method: 'POST' });
-        status.textContent = "Ejecución iniciada en background...";
+
+        status.textContent = "Solicitud enviada...";
         status.style.color = "var(--success)";
     } catch (e) {
         status.textContent = "Error de conexión";
         status.style.color = "var(--error)";
-    } finally {
-        setTimeout(() => {
-            btn.disabled = false;
-            status.textContent = "";
-        }, 5000);
+        // Cleanup if request itself failed
+        clearInterval(pollInterval);
+        btn.disabled = false;
     }
+    // Do NOT clear interval in finally
 }
 
 // Init
@@ -215,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('btn-save-config').onclick = saveConfig;
     document.getElementById('btn-add-pl').onclick = addPlaylist;
-    document.getElementById('btn-run').onclick = runNow;
+    document.getElementById('btn-download').onclick = runNow;
 });
 
 // Expose delete to window for onclick

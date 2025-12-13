@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpusVault Downloader</title>
+    <title>OpusVault</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
@@ -20,21 +20,32 @@
             <!-- Dashboard Section -->
             <section id="dashboard" class="card">
                 <h2>Dashboard</h2>
-                <div class="dashboard-controls">
-                    <button id="btn-run" class="btn btn-primary">
-                        <span class="icon">▶</span> Ejecutar Ahora
+                <div class="actions">
+                    <button id="btn-download" class="button primary">
+                        <span>⬇</span> Descargar
                     </button>
-                    <p id="run-status" class="status-text"></p>
+                    <!-- <button id="btn-save" class="button secondary">Guardar Config</button> -->
                 </div>
+
+                <div id="status-container" style="display: none;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: var(--success);">Estado: <span
+                            id="status-state">Inactivo</span></h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem;">
+                        <div>🎵 <strong>Actual:</strong> <span id="status-song"
+                                style="color: var(--text-main);">-</span></div>
+                        <div>📊 <strong>Total:</strong> <span id="status-total">0</span></div>
+                    </div>
+                </div>
+                <p id="run-status" class="status-text"></p>
             </section>
 
             <!-- Playlists Section -->
             <section id="playlists" class="card">
                 <h2>Playlists</h2>
                 <div class="add-playlist-form">
-                    <input type="text" id="pl-name" placeholder="Nombre Playlist" class="input">
-                    <input type="text" id="pl-url" placeholder="URL Spotify/YouTube" class="input">
-                    <button id="btn-add-pl" class="btn btn-success">+</button>
+                    <input type="text" id="pl-name" placeholder="Nombre (ej. Gimnasio)" class="input">
+                    <input type="text" id="pl-url" placeholder="URL de Spotify o YouTube" class="input">
+                    <button id="btn-add-pl" class="btn btn-success" style="width: auto;">+</button>
                 </div>
                 <div id="playlist-list" class="list-group">
                     <!-- Playlists rendered here -->
@@ -44,75 +55,50 @@
             <!-- Config Section -->
             <section id="config" class="card">
                 <h2>Configuración</h2>
-                <div class="form-group">
-                    <label>Directorio Salida</label>
-                    <input type="text" id="conf-output" class="input">
+
+                <div class="form-row">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Directorio de Salida</label>
+                        <input type="text" id="conf-output" class="input" placeholder="/downloads">
+                    </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Proveedor de Letras</label>
-                        <select id="conf-lyrics" class="input">
-                            <option value="genius">Genius (Recomendado)</option>
-                            <option value="musixmatch">Musixmatch</option>
-                            <option value="azlyrics">AzLyrics</option>
-                            <option value="synced">Synced (Multi-source)</option>
-                            <option value="none">Desactivado</option>
-                        </select>
-                    </div>
-                </div>
-
-                <h3
-                    style="margin-top: 1.5rem; font-size: 1rem; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
-                    Spotify Auth (Fix 429 Errors)</h3>
-                <div class="form-row">
-                    <div class="form-group" style="flex: 1;">
-                        <label>Client ID</label>
-                        <input type="text" id="conf-client-id" class="input" placeholder="Pegar Client ID aquí">
-                    </div>
-                    <div class="form-group" style="flex: 1;">
-                        <label>Client Secret</label>
-                        <input type="password" id="conf-client-secret" class="input"
-                            placeholder="Pegar Client Secret aquí">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Formato</label>
-                        <select id="conf-format" class="input select">
-                            <option value="opus">Opus</option>
-                            <option value="mp3">MP3</option>
-                            <option value="m4a">M4A</option>
-                            <option value="flac">FLAC</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Bitrate</label>
-                        <select id="conf-bitrate" class="input select">
-                            <option value="96k">96k</option>
-                            <option value="128k">128k</option>
-                            <option value="160k">160k</option>
-                            <option value="320k">320k</option>
+                        <label>Formato de Audio</label>
+                        <select id="conf-format" class="input">
+                            <option value="opus">Opus (Mejor Calidad/Peso)</option>
+                            <option value="mp3">MP3 (Compatible)</option>
+                            <option value="m4a">M4A (AAC)</option>
+                            <option value="flac">FLAC (Sin Pérdida)</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Concurrencia</label>
-                        <input type="number" id="conf-concurrency" class="input" min="1" max="5">
+                        <input type="number" id="conf-concurrency" class="input" min="1" max="5" value="2">
                     </div>
                 </div>
-                <button id="btn-save-config" class="btn btn-secondary">Guardar Configuración</button>
+
+                <div class="actions">
+                    <button id="btn-save-config" class="button secondary">Guardar Configuración</button>
+                </div>
                 <p id="config-status" class="status-text"></p>
             </section>
         </main>
-        <div id="tracks-modal" class="modal" style="display:none;">
-            <div class="modal-content">
-                <span class="close-btn"
-                    onclick="document.getElementById('tracks-modal').style.display='none'">&times;</span>
-                <h3 id="modal-title">Canciones Descargadas</h3>
-                <ul id="tracks-list" class="track-list"></ul>
+    </div>
+
+    <!-- Tracks Modal -->
+    <div id="tracks-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                <h3 style="margin:0">Canciones Descargadas</h3>
+                <button onclick="document.getElementById('tracks-modal').style.display='none'" class="btn btn-secondary"
+                    style="padding: 5px 10px;">✕</button>
             </div>
+            <ul id="tracks-list" class="track-list" style="padding-left: 20px;"></ul>
         </div>
     </div>
+
     <script src="app.js"></script>
 </body>
 

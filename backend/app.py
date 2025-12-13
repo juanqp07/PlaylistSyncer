@@ -51,6 +51,14 @@ logger = logging.getLogger("backend")
 # Servir frontend estático
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
+# Custom Filter to silence /status logs
+class EndpointFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().find("GET /status") == -1
+
+# Filter uvicorn access logs
+logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
+
 @app.get("/")
 async def read_index():
     return FileResponse(FRONTEND_DIR / "index.html")
@@ -70,15 +78,11 @@ manager = DownloaderManager(config_path=CONFIG_PATH)
 
 # Models
 class ConfigUpdate(BaseModel):
-    output_dir: str = None
-    default_tool: str = None
-    concurrency: int = None
-    retry: Dict[str, int] = None
+    output_dir: Optional[str] = None
+    concurrency: Optional[int] = 2
+    format: Optional[str] = "opus"
     spotdl_extra_args: List[str] = None
     ytdlp_extra_args: List[str] = None
-    spotify_client_id: str = None
-    spotify_client_secret: str = None
-    lyrics_provider: str = "genius"
 
 class Playlist(BaseModel):
     id: str
@@ -91,17 +95,11 @@ def get_config():
     manager.reload_config()
     config = manager.config.copy()
     config["is_docker"] = (BASE_DIR.name == "app")
-    
-    # Check if configured via Env
-    if os.getenv("SPOTIFY_CLIENT_ID") and os.getenv("SPOTIFY_CLIENT_SECRET"):
-        config["env_auth_set"] = True
-        # Don't send actual secrets to frontend if managed by env
-        config["spotify_client_id"] = "********"
-        config["spotify_client_secret"] = "********"
-    else:
-        config["env_auth_set"] = False
-        
     return config
+
+@app.get("/status")
+def get_status():
+    return manager.status
 
 @app.post("/config")
 def update_config(cfg: Dict[str, Any]):
@@ -112,10 +110,7 @@ def update_config(cfg: Dict[str, Any]):
         current = {}
     
     # Filter out masked secrets to avoid corrupting config.json
-    if cfg.get("spotify_client_id") == "********":
-        cfg.pop("spotify_client_id", None)
-    if cfg.get("spotify_client_secret") == "********":
-        cfg.pop("spotify_client_secret", None)
+    # Removed as we no longer handle credentials
         
     current.update(cfg)
     CONFIG_PATH.write_text(json.dumps(current, indent=2), encoding="utf-8")

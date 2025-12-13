@@ -8,6 +8,9 @@ import queue
 import time
 import os
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+
+import re
 
 # Configurar logger localmente para este módulo
 logger = logging.getLogger("downloader.core")
@@ -16,6 +19,15 @@ class DownloaderManager:
     def __init__(self, config_path, output_dir=None):
         self.config_path = Path(config_path)
         self.output_dir = Path(output_dir) if output_dir else None
+        self.executor = ThreadPoolExecutor(max_workers=1) # Added executor
+        # Global status for UI
+        self.status = {
+            "state": "idle", # idle, downloading, error
+            "current_song": None,
+            "total_songs": 0,
+            "downloaded": 0,
+            "playlist_name": None
+        } # Initialized self.status unconditionally
         self.config = {}
         self.reload_config()
         
@@ -52,40 +64,20 @@ class DownloaderManager:
             if not shutil.which(tool):
                 logger.critical(f"Herramienta faltante: {tool}")
         
-        # Crear config de SpotDL
         try:
-            # Prioritize Env Vars
-            client_id = os.getenv("SPOTIFY_CLIENT_ID") or self.config.get("spotify_client_id", "")
-            client_secret = os.getenv("SPOTIFY_CLIENT_SECRET") or self.config.get("spotify_client_secret", "")
-            lyrics_provider = self.config.get("lyrics_provider", "genius")
+            # Check ffmpeg
+            subprocess.run(["ffmpeg", "-version"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
-            conf_data = {
-                "lyrics_providers": [lyrics_provider],
-                "client_id": client_id,
-                "client_secret": client_secret
-            }
-            
-            # If user hasn't configured them, maybe don't write them? 
-            # SpotDL might error if empty strings are passed.
-            if not client_id or not client_secret:
-                conf_data.pop("client_id", None)
-                conf_data.pop("client_secret", None)
-
-            # Write config to the standard location (SpotDL 4.x+)
-            # Based on 'spotdl --generate-config' output, this is the authoritative path.
+            # Crear config de SpotDL (Basic)
+            # We no longer manage credentials or lyrics provider here
+            # SpotDL will use its default config or environment variables for credentials.
+            # We still ensure the config directory exists, as SpotDL might write to it.
             config_path = Path.home() / ".config" / "spotdl" / "config.json"
-            
-            try:
-                config_path.parent.mkdir(parents=True, exist_ok=True)
-                json_str = json.dumps(conf_data, indent=2)
-                config_path.write_text(json_str, encoding="utf-8")
-                logger.info(f"SpotDL config escrito en: {config_path}")
-                logger.info(f"Contenido config SpotDL: {json_str}")
-            except Exception as e:
-                logger.warning(f"No se pudo escribir config en {config_path}: {e}")
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Directorio de configuración de SpotDL asegurado: {config_path.parent}")
                     
         except Exception as e:
-            logger.warning(f"Error general creando config de SpotDL: {e}")
+            logger.warning(f"Error general verificando dependencias: {e}")
 
     def _run_cmd(self, cmd):
         cmd_str = ' '.join(cmd)
@@ -97,7 +89,71 @@ class DownloaderManager:
             for line in proc.stdout:
                 line = line.strip()
                 if line:
-                    out_lines.append(line)
+                    # ANSI Colors for nicer logs
+                    C_GREEN = "\033[92m"
+                    C_CYAN = "\033[96m"
+                    C_YELLOW = "\033[93m"
+                    C_RED = "\033[91m"
+                    C_RESET = "\033[0m"
+
+                    # Auto-recover from rate limit state if new output appears
+                    if self.status["state"] == "retrying" and "rate/request limit" not in line:
+                         self.status["state"] = "downloading"
+                         self.status["current_song"] = "Reanudando..."
+
+                    # Parsing logic
+                    
+                    # 1. Start Downloading
+                    if "Downloading" in line:
+                        clean = line.replace("Downloading", "").strip().replace('"', '')
+                        self.status["current_song"] = clean
+                        self.status["state"] = "downloading"
+                        logger.info(f"{C_CYAN}⬇ INICIANDO: {clean}{C_RESET}")
+                    
+                    # 2. Finished Downloading (Regex for 'Downloaded "Title": url')
+                    # Log line example: Downloaded "Title": https://...
+                    elif "Downloaded" in line:
+                         match = re.search(r'Downloaded "(.+?)"', line)
+                         song_name = match.group(1) if match else "Canción"
+                         
+                         self.status["downloaded"] += 1
+                         self.status["current_song"] = f"✔ {song_name}"
+                         self.status["state"] = "downloading" # Ensure active state
+                         logger.info(f"{C_GREEN}✔ COMPLETADO: {song_name}{C_RESET}")
+                    
+                    # 3. Skipping
+                    elif "Skipping" in line:
+                        clean = line.replace("Skipping", "").strip().replace('"', '')
+                        self.status["current_song"] = f"⏭ Saltando: {clean}"
+                        self.status["downloaded"] += 1 
+                        logger.info(f"{C_YELLOW}⏭ SALTANDO: {clean}{C_RESET}")
+                        
+                    # 4. Total Songs
+                    elif "Found" in line and "songs" in line:
+                         parts = line.split()
+                         for p in parts:
+                             if p.isdigit():
+                                 val = int(p)
+                                 if val > 0:
+                                     self.status["total_songs"] = val
+                                 break
+                         logger.info(f"{C_CYAN}📊 TOTAL ENCONTRADO: {self.status['total_songs']} canciones{C_RESET}")
+                    
+                    # 5. Rate Limit
+                    elif "rate/request limit" in line:
+                        wait_time = "un momento"
+                        match = re.search(r"after:\s*(\d+)", line)
+                        if match:
+                            wait_time = f"{match.group(1)}s"
+                        
+                        self.status["current_song"] = f"⏳ Límite de API (Reintentando en {wait_time}...)"
+                        self.status["state"] = "retrying"
+                        logger.warning(f"{C_RED}⚠ RATE LIMIT: Esperando {wait_time}{C_RESET}")
+                        
+                    # 6. Fallback logging for other lines (muted)
+                    else:
+                        logger.debug(f"STDOUT: {line}")
+
         except Exception as e:
             proc.kill()
             raise e
@@ -139,9 +195,21 @@ class DownloaderManager:
                 url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
                 save_file = sync_dir / f"{url_hash}.spotdl"
                 
+                # Pre-load stats from existing sync file if possible
+                try:
+                    if save_file.exists():
+                        data = json.loads(save_file.read_text(encoding='utf-8'))
+                        if "songs" in data:
+                            self.status["total_songs"] = len(data["songs"])
+                        if "name" in data:
+                            self.status["playlist_name"] = data["name"]
+                        logger.info(f"Stats precargados de sync file: {self.status['total_songs']} canciones")
+                except Exception as e:
+                    logger.warning(f"No se pudo leer sync file: {e}")
+
                 # Obtener formato y bitrate
                 fmt = self.config.get("format", "mp3")
-                bitrate = self.config.get("bitrate", "320k")
+                bitrate = "auto"
                 
                 # Determine m3u filename
                 if m3u_name:
@@ -160,32 +228,51 @@ class DownloaderManager:
                     "--output", str(self.output_dir),
                     "--format", fmt,
                     "--bitrate", bitrate,
-                    "--m3u", m3u_arg,
-                    "--lyrics", lyrics_provider,
-                    "--no-cache"
+                    "--m3u", m3u_arg # Always add our m3u arg first
                 ]
-                
-                # Explicitly pass credentials if available to avoid 429 errors
-                client_id = os.getenv("SPOTIFY_CLIENT_ID") or self.config.get("spotify_client_id", "")
-                client_secret = os.getenv("SPOTIFY_CLIENT_SECRET") or self.config.get("spotify_client_secret", "")
-                
-                if client_id and client_secret and client_id != "********":
-                    cmd.extend(["--client-id", client_id, "--client-secret", client_secret])
+                cmd.extend(extra_args) # Then add extra args, which can override if they contain --m3u
             else:
                 cmd = ["yt-dlp", url, "-P", str(self.output_dir)]
             
-            cmd += extra_args
-
-            while attempts < max_att and not success:
+            # Set state to running for this url
+            self.status["state"] = "processing"
+            
+            while attempts < max_att:
                 attempts += 1
                 logger.info(f"Descargando {url} con {tool} (Intento {attempts})")
                 
-                ok, lines = self._run_cmd(cmd)
-                if ok:
-                    success = True
+                success, logs = self._run_cmd(cmd)
+                
+                if success:
+                    # Post-process M3U8 to fix paths
+                    if tool == "spotdl" and m3u_name: # Only for spotdl and if m3u_name was provided
+                        try:
+                            # m3u_arg is the full path to the m3u8 file
+                            m3u_file = Path(m3u_arg)
+                            if m3u_file.exists():
+                                content = m3u_file.read_text(encoding='utf-8')
+                                
+                                new_lines = []
+                                for line in content.splitlines():
+                                    if line.startswith("#") or not line.strip():
+                                        new_lines.append(line)
+                                        continue
+                                        
+                                    # It's a file path
+                                    p = Path(line)
+                                    # Force simple filename relative to current directory
+                                    filename = p.name
+                                    new_lines.append(f"./{filename}")
+                                
+                                m3u_file.write_text("\n".join(new_lines), encoding='utf-8')
+                                logger.info(f"Corregidas rutas en M3U: {m3u_file}")
+                        except Exception as e:
+                            logger.error(f"Error procesando M3U: {e}")
+                            
                     results.append({"url": url, "status": "success", "attempts": attempts})
+                    break # Exit retry loop
                 else:
-                    logger.warning(f"Error en intento {attempts}. Salida:\n" + "\n".join(lines[-10:]))
+                    logger.warning(f"Error en intento {attempts}. Salida:\n" + "\n".join(logs[-10:]))
                     if attempts < max_att:
                         time.sleep(retry_cfg.get("backoff_seconds", 5))
                     else:
@@ -225,6 +312,11 @@ class DownloaderManager:
             t = self.determine_tool(u)
             tasks.append((u, t, m3u_name))
             
+        # Init status
+        self.status["state"] = "starting"
+        self.status["total_songs"] = 0 # Reset count for new batch
+        self.status["downloaded"] = 0
+            
         for t in tasks:
             q.put(t)
             
@@ -240,4 +332,8 @@ class DownloaderManager:
         for th in threads:
             th.join()
             
+        # Reset status to idle when done
+        self.status["state"] = "idle"
+        self.status["current_song"] = None
+        
         return results

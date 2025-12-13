@@ -2,7 +2,6 @@
   "default_tool": "spotdl",
   "output_dir": "./downloads",
   "format": "opus",
-  "bitrate": "128k",
   "concurrency": 1,
   "ffmpeg_path": "ffmpeg",
   "spotdl_extra_args": [],
@@ -15,6 +14,7 @@
     "convert_with_ffmpeg": true,
     "normalize_audio": false
   },
+  "retry_delay": 10,
   "filename_template": "{artist} - {title}.{ext}",
   "notify": {
     "enabled": false,
@@ -24,8 +24,5 @@
   "retry": {
     "attempts": 5,
     "backoff_seconds": 10
-  },
-  "lyrics_provider": "genius",
-  "spotify_client_id": "a30514a3c22d477980b53048d7847b14",
-  "spotify_client_secret": "087f50e064264976bd72b83f2264337b"
+  }
 }
