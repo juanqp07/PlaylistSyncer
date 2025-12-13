@@ -28,15 +28,51 @@
                 </div>
 
                 <div id="status-container" style="display: none;">
-                    <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: var(--success);">Estado: <span
-                            id="status-state">Inactivo</span></h3>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem;">
-                        <div>🎵 <strong>Actual:</strong> <span id="status-song"
-                                style="color: var(--text-main);">-</span></div>
-                        <div>📊 <strong>Total:</strong> <span id="status-total">0</span></div>
+                    <!-- Status Header -->
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3
+                            style="margin: 0; font-size: 1rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">
+                            Estado</h3>
+                        <span id="status-state" class="status-badge"
+                            style="background: rgba(139, 92, 246, 0.2); color: #d8b4fe; border: 1px solid rgba(139, 92, 246, 0.3);">Inactivo</span>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="progress-wrapper">
+                        <div class="progress-bg">
+                            <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <div
+                            style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.85rem; color: var(--text-muted);">
+                            <span id="progress-percent">0%</span>
+                            <span><span id="status-downloaded">0</span> / <span id="status-total-count">0</span></span>
+                        </div>
+                    </div>
+
+                    <!-- Current Song -->
+                    <div class="media-info">
+                        <div class="media-icon">🎵</div>
+                        <div class="media-details">
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">EN PROCESO
+                            </div>
+                            <div id="status-song" class="text-truncate" style="font-size: 1rem; font-weight: 600;">-
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hacker Console -->
+                    <div class="console-box">
+                        <div class="console-header">
+                            <span>>_ TERMINAL</span>
+                            <button id="btn-clear-console" title="Limpiar">✕</button>
+                        </div>
+                        <div id="console-logs" class="console-content">
+                            <!-- Logs will be injected here -->
+                        </div>
                     </div>
                 </div>
-                <p id="run-status" class="status-text"></p>
+                <!-- Removed old #run-status -->
             </section>
 
             <!-- Playlists Section -->

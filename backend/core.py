@@ -15,11 +15,37 @@ import re
 # Configurar logger localmente para este módulo
 logger = logging.getLogger("downloader.core")
 
+class WebSocketLogHandler(logging.Handler):
+    def __init__(self, broadcast_func):
+        super().__init__()
+        self.broadcast_func = broadcast_func
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            # We broadcast a "log" event
+            if self.broadcast_func:
+                self.broadcast_func("log", msg)
+        except Exception:
+            self.handleError(record)
+
 class DownloaderManager:
-    def __init__(self, config_path, output_dir=None):
+    def __init__(self, config_path, output_dir=None, broadcast_func=None):
         self.config_path = Path(config_path)
         self.output_dir = Path(output_dir) if output_dir else None
-        self.executor = ThreadPoolExecutor(max_workers=1) # Added executor
+        self.broadcast_func = broadcast_func
+        self.executor = ThreadPoolExecutor(max_workers=1)
+        
+        # Setup WS Logger if broadcast function is provided
+        if self.broadcast_func:
+            ws_handler = WebSocketLogHandler(self.broadcast_func)
+            ws_handler.setLevel(logging.INFO)
+            # Create a simple formatter that doesn't duplicate timestamp since frontend handles it?
+            # Or just raw message. Let's keep it simple.
+            formatter = logging.Formatter('%(message)s')
+            ws_handler.setFormatter(formatter)
+            logger.addHandler(ws_handler)
+            
         # Global status for UI
         self.status = {
             "state": "idle", # idle, downloading, error
@@ -27,7 +53,7 @@ class DownloaderManager:
             "total_songs": 0,
             "downloaded": 0,
             "playlist_name": None
-        } # Initialized self.status unconditionally
+        } 
         self.config = {}
         self.reload_config()
         
@@ -37,6 +63,12 @@ class DownloaderManager:
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.verify_dependencies()
+
+    def update_status(self, key, value):
+        """Helper to update status and broadcast change."""
+        self.status[key] = value
+        if self.broadcast_func:
+            self.broadcast_func("status", self.status)
 
     def reload_config(self):
         """Recarga la configuración desde el archivo JSON."""
@@ -153,6 +185,10 @@ class DownloaderManager:
                     # 6. Fallback logging for other lines (muted)
                     else:
                         logger.debug(f"STDOUT: {line}")
+
+                    # Broadcast status update if something changed
+                    if self.broadcast_func:
+                        self.broadcast_func("status", self.status)
 
         except Exception as e:
             proc.kill()
@@ -316,6 +352,7 @@ class DownloaderManager:
         self.status["state"] = "starting"
         self.status["total_songs"] = 0 # Reset count for new batch
         self.status["downloaded"] = 0
+        if self.broadcast_func: self.broadcast_func("status", self.status)
             
         for t in tasks:
             q.put(t)
@@ -335,5 +372,6 @@ class DownloaderManager:
         # Reset status to idle when done
         self.status["state"] = "idle"
         self.status["current_song"] = None
+        if self.broadcast_func: self.broadcast_func("status", self.status)
         
         return results

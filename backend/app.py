@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Body, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Body, BackgroundTasks, WebSocket, WebSocketDisconnect
 import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import logging
 import threading
-import threading
+import asyncio
 import os
 from pathlib import Path
 try:
@@ -15,6 +15,31 @@ except ImportError:
     from core import DownloaderManager
 import json
 from apscheduler.schedulers.background import BackgroundScheduler
+
+# WebSocket Manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: Dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                # If sending fails, we might want to remove the connection, 
+                # but typically disconnect handles it. 
+                # For robustness, we could clean up here too.
+                pass
+                
+connection_manager = ConnectionManager()
 
 app = FastAPI()
 
@@ -74,7 +99,64 @@ async def read_js():
 if not PLAYLISTS_PATH.exists():
     PLAYLISTS_PATH.write_text("[]", encoding="utf-8")
 
-manager = DownloaderManager(config_path=CONFIG_PATH)
+# Helper to bridge Sync (Core) -> Async (WebSockets)
+def broadcast_to_ws(event_type: str, data: Any):
+    """
+    Called from Sync code (DownloaderManager).
+    Schedules the broadcast coroutine on the running event loop if possible,
+    or creates a new loop if needed (though uvicorn provides one).
+    
+    Since core is running in threads, we need `asyncio.run_coroutine_threadsafe`
+    or similar if we want to wait, but fire-and-forget is okay.
+    Actually, accessing the main loop from a thread is tricky.
+    
+    The robust way: Use connection_manager.broadcast inside an async wrapper,
+    and call it from the thread using the loop.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # We are likely in an async context or the loop is accessible.
+            # But core runs in threads.
+            # We need the loop that uvicorn is running.
+            # A global reference to the loop would be good, OR:
+            # We just fire and forget if we can get a handle on it.
+            pass
+    except:
+        pass
+
+    # Simplified approach for FastApi + Threading:
+    # Use run_until_complete is bad if loop is running.
+    # We will need to store the main loop on startup.
+    # For now, let's define the function and update it later or use a global loop variable.
+    pass
+
+# We need a reference to the main loop to schedule tasks from threads
+main_loop = None
+
+@app.on_event("startup")
+async def startup_event():
+    global main_loop
+    main_loop = asyncio.get_running_loop()
+
+def sync_broadcast(event_type, data):
+    msg = {"type": event_type, "data": data}
+    if main_loop and connection_manager.active_connections:
+        asyncio.run_coroutine_threadsafe(connection_manager.broadcast(msg), main_loop)
+
+manager = DownloaderManager(config_path=CONFIG_PATH, broadcast_func=sync_broadcast)
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await connection_manager.connect(websocket)
+    try:
+        while True:
+            # Keep alive / maybe receive commands later?
+            data = await websocket.receive_text()
+            # Echo or handle?
+            # For now, mostly one-way (Server -> Client)
+    except WebSocketDisconnect:
+        connection_manager.disconnect(websocket)
 
 # Models
 class ConfigUpdate(BaseModel):

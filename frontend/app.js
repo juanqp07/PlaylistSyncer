@@ -166,107 +166,145 @@ async function deletePlaylist(id) {
     }
 }
 
+// WebSocket
+let socket;
+let reconnectTimer;
+
+function connectWS() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+    socket = new WebSocket(wsUrl);
+
+    socket.onopen = () => {
+        console.log("WS Connected");
+        setOnline(true);
+        if (reconnectTimer) clearInterval(reconnectTimer);
+    };
+
+    socket.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'status') updateStatusUI(msg.data);
+            if (msg.type === 'log') appendLog(msg.data);
+        } catch (e) { console.error("WS Parse Error", e); }
+    };
+
+    socket.onclose = () => {
+        console.log("WS Disconnected");
+        setOnline(false);
+        // Try reconnect
+        reconnectTimer = setTimeout(connectWS, 3000);
+    };
+}
+
+// UI Updaters
+function updateStatusUI(data) {
+    const container = document.getElementById('status-container');
+    const stateBadge = document.getElementById('status-state');
+    const progressBar = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-percent');
+
+    // Show container if active
+    if (data.state !== 'idle') {
+        container.style.display = 'block';
+    }
+
+    // Map states
+    const statusMap = {
+        'idle': 'Inactivo',
+        'starting': 'Iniciando...',
+        'processing': 'Procesando...',
+        'downloading': 'Descargando',
+        'retrying': 'Reintentando (Límite API)',
+        'error': 'Error'
+    };
+
+    stateBadge.textContent = statusMap[data.state] || data.state;
+
+    // Progress
+    let percent = 0;
+    if (data.total_songs > 0) {
+        percent = Math.round((data.downloaded / data.total_songs) * 100);
+    }
+    progressBar.style.width = `${percent}%`;
+    progressText.textContent = `${percent}%`;
+
+    document.getElementById('status-downloaded').textContent = data.downloaded;
+    document.getElementById('status-total-count').textContent = data.total_songs;
+
+    // Song Info
+    const songEl = document.getElementById('status-song');
+    if (data.current_song) {
+        songEl.textContent = data.current_song;
+    }
+
+    // Completion Check
+    if (data.state === 'idle' && percent === 100 && data.total_songs > 0) {
+        stateBadge.textContent = 'Finalizado';
+        stateBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+        stateBadge.style.color = 'var(--success)';
+        // Optional: Hide after delay, but user might want to see logs
+    }
+}
+
+function appendLog(text) {
+    const consoleBox = document.getElementById('console-logs');
+    const div = document.createElement('div');
+    div.className = 'log-line log-dim'; // Default style
+
+    // ANSI color parsing (basic)
+    // 92m = Green, 96m = Cyan, 93m = Yellow, 91m = Red, 0m = Reset
+    if (text.includes('\u001b[92m')) div.className = 'log-line log-green';
+    else if (text.includes('\u001b[96m')) div.className = 'log-line log-cyan';
+    else if (text.includes('\u001b[93m')) div.className = 'log-line log-yellow';
+    else if (text.includes('\u001b[91m')) div.className = 'log-line log-red';
+
+    // Strip codes for clean text
+    // eslint-disable-next-line no-control-regex
+    const cleanText = text.replace(/\u001b\[\d+m/g, '');
+    div.textContent = `> ${cleanText}`;
+
+    consoleBox.appendChild(div);
+    consoleBox.scrollTop = consoleBox.scrollHeight;
+}
+
 // Run
 async function runNow() {
     const btn = document.getElementById('btn-download');
-    const status = document.getElementById('run-status');
 
-    // Show status container immediately
+    // Reset UI
     document.getElementById('status-container').style.display = 'block';
-
-    let hasStarted = false;
-    let attempts = 0;
-
-    // Start polling status
-    const pollInterval = setInterval(async () => {
-        try {
-            const res = await fetch(`${API_URL}/status`);
-            const data = await res.json();
-
-            const statusMap = {
-                'idle': 'Inactivo',
-                'starting': 'Iniciando...',
-                'processing': 'Procesando...',
-                'downloading': 'Descargando',
-                'retrying': 'Reintentando (Límite API)',
-                'error': 'Error'
-            };
-
-            document.getElementById('status-state').textContent = statusMap[data.state] || data.state;
-            document.getElementById('status-song').textContent = data.current_song || "-";
-            // Show progress: 10 / 150
-            document.getElementById('status-total').textContent = `${data.downloaded} / ${data.total_songs || "?"}`;
-
-            // Check if process has started
-            if (data.state !== 'idle') {
-                hasStarted = true;
-                // Clear "Request sent" message once we see movement
-                if (status.textContent === "Solicitud enviada...") {
-                    status.textContent = "";
-                }
-            }
-
-            attempts++;
-
-            // Completion logic
-            // If we have started seeing activity, and now it is idle again -> Finished
-            if (hasStarted && data.state === 'idle') {
-                clearInterval(pollInterval);
-                btn.disabled = false;
-
-                // Update header
-                status.textContent = "¡Completado! 🎉";
-                status.style.color = "var(--success)";
-                document.getElementById('status-state').textContent = "Finalizado";
-
-                // Clear stats details as requested to avoid "Actual: -" ugliness
-                document.getElementById('status-song').parentElement.style.opacity = '0.3';
-                document.getElementById('status-song').textContent = "-";
-
-                setTimeout(() => {
-                    status.textContent = "";
-                    document.getElementById('status-container').style.display = 'none'; // Hide entirely after a while
-                    document.getElementById('status-song').parentElement.style.opacity = '1'; // Reset for next time
-                }, 5000);
-            }
-
-            // Safety: if 10 seconds passed and still idle, assume it failed to start or finished instantly
-            if (!hasStarted && attempts > 20) { // 20 * 0.5s = 10s
-                clearInterval(pollInterval);
-                btn.disabled = false;
-                status.textContent = "No se detectó actividad (o finalizó muy rápido).";
-                setTimeout(() => status.textContent = "", 5000);
-            }
-
-        } catch (e) { console.error(e); }
-    }, 500);
+    document.getElementById('console-logs').innerHTML = '';
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('status-state').textContent = 'Solicitando...';
 
     try {
         btn.disabled = true;
-
-        // Trigger run
         await fetch(`${API_URL}/run`, { method: 'POST' });
-
-        status.textContent = "Solicitud enviada...";
-        status.style.color = "var(--success)";
+        // The WS will take over from here
     } catch (e) {
-        status.textContent = "Error de conexión";
-        status.style.color = "var(--error)";
-        // Cleanup if request itself failed
-        clearInterval(pollInterval);
+        alert("Error de conexión al iniciar");
         btn.disabled = false;
     }
-    // Do NOT clear interval in finally
+
+    // Re-enable button after a bit just in case, or listen to idle state
+    setTimeout(() => btn.disabled = false, 2000);
 }
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
     loadConfig();
     loadPlaylists();
+    connectWS();
 
     document.getElementById('btn-save-config').onclick = saveConfig;
     document.getElementById('btn-add-pl').onclick = addPlaylist;
     document.getElementById('btn-download').onclick = runNow;
+
+    document.getElementById('btn-clear-console').onclick = () => {
+        document.getElementById('console-logs').innerHTML = '';
+    };
 });
 
 // Expose delete to window for onclick
