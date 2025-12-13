@@ -1,24 +1,67 @@
-
 from fastapi import FastAPI, HTTPException, Body, BackgroundTasks
+import uvicorn
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Optional, Dict, Any
 import logging
 import threading
+import threading
+import os
 from pathlib import Path
-from core import DownloaderManager
-import uvicorn
+try:
+    from backend.core import DownloaderManager
+except ImportError:
+    from core import DownloaderManager
 import json
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# Setup logging
+app = FastAPI()
+
+# Rutas
+current_dir = Path(__file__).resolve().parent
+if current_dir.name == "app":
+    # Docker (usually /app)
+    BASE_DIR = current_dir
+elif (current_dir / "config.json").exists():
+    # Flat structure (e.g. manual run)
+    BASE_DIR = current_dir
+else:
+    # Local (nested structure: script/backend -> script/)
+# Local (nested structure: script/backend -> script/)
+    BASE_DIR = current_dir.parent
+
+# DEBUG LOGGING
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("backend")
+logger.info(f"STARTUP DEBUG: current_dir={current_dir}")
+logger.info(f"STARTUP DEBUG: current_dir.name={current_dir.name}")
+logger.info(f"STARTUP DEBUG: BASE_DIR={BASE_DIR}")
+logger.info(f"STARTUP DEBUG: Has SPOTIFY_CLIENT_ID? {bool(os.getenv('SPOTIFY_CLIENT_ID'))}")
+logger.info(f"STARTUP DEBUG: Env Keys: {list(os.environ.keys())}")
+
+CONFIG_PATH = BASE_DIR / "config.json"
+PLAYLISTS_PATH = BASE_DIR / "playlists.json"
+FRONTEND_DIR = BASE_DIR / "frontend"
+
+# Configurar logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
 
-app = FastAPI(title="Downloader Manager API")
+# Servir frontend estático
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-BASE_DIR = Path(__file__).parent.parent # /home/juan/Música/script
-CONFIG_PATH = BASE_DIR / "config.json"
-PLAYLISTS_PATH = BASE_DIR / "playlists.json"
+@app.get("/")
+async def read_index():
+    return FileResponse(FRONTEND_DIR / "index.html")
+
+@app.get("/style.css")
+async def read_css():
+    return FileResponse(FRONTEND_DIR / "style.css")
+
+@app.get("/app.js")
+async def read_js():
+    return FileResponse(FRONTEND_DIR / "app.js")
 
 if not PLAYLISTS_PATH.exists():
     PLAYLISTS_PATH.write_text("[]", encoding="utf-8")
@@ -33,6 +76,9 @@ class ConfigUpdate(BaseModel):
     retry: Dict[str, int] = None
     spotdl_extra_args: List[str] = None
     ytdlp_extra_args: List[str] = None
+    spotify_client_id: str = None
+    spotify_client_secret: str = None
+    lyrics_provider: str = "genius"
 
 class Playlist(BaseModel):
     id: str
@@ -43,7 +89,19 @@ class Playlist(BaseModel):
 @app.get("/config")
 def get_config():
     manager.reload_config()
-    return manager.config
+    config = manager.config.copy()
+    config["is_docker"] = (BASE_DIR.name == "app")
+    
+    # Check if configured via Env
+    if os.getenv("SPOTIFY_CLIENT_ID") and os.getenv("SPOTIFY_CLIENT_SECRET"):
+        config["env_auth_set"] = True
+        # Don't send actual secrets to frontend if managed by env
+        config["spotify_client_id"] = "********"
+        config["spotify_client_secret"] = "********"
+    else:
+        config["env_auth_set"] = False
+        
+    return config
 
 @app.post("/config")
 def update_config(cfg: Dict[str, Any]):
@@ -53,9 +111,16 @@ def update_config(cfg: Dict[str, Any]):
     except:
         current = {}
     
+    # Filter out masked secrets to avoid corrupting config.json
+    if cfg.get("spotify_client_id") == "********":
+        cfg.pop("spotify_client_id", None)
+    if cfg.get("spotify_client_secret") == "********":
+        cfg.pop("spotify_client_secret", None)
+        
     current.update(cfg)
     CONFIG_PATH.write_text(json.dumps(current, indent=2), encoding="utf-8")
     manager.reload_config()
+    manager.verify_dependencies() # Regenerate SpotDL config
     return manager.config
 
 @app.get("/playlists")
@@ -125,15 +190,64 @@ def execution_job():
             return
 
         playlists = json.loads(PLAYLISTS_PATH.read_text())
-        all_urls = []
-        for p in playlists:
-            all_urls.extend(p.get("urls", []))
+        total_processed = 0
         
-        if all_urls:
-            results = manager.process_urls(all_urls)
-            logger.info(f"Execution finished. Processed {len(all_urls)} URLs.")
+        for p in playlists:
+            urls = p.get("urls", [])
+            if not urls:
+                continue
+                
+            logger.info(f"Processing playlist: {p['name']}")
+            # Process each playlist individually to support Named M3U8s
+            manager.process_urls(urls, m3u_name=p["name"])
+            total_processed += len(urls)
+        
+        logger.info(f"Execution finished. Processed {total_processed} URLs.")
+
     except Exception as e:
         logger.error(f"Execution error: {e}")
+
+@app.get("/playlists/{id}/tracks")
+def get_playlist_tracks(id: str):
+    try:
+        data = json.loads(PLAYLISTS_PATH.read_text())
+    except:
+        return []
+
+    target_pl = next((p for p in data if p["id"] == id), None)
+    if not target_pl:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    # Name sanitization must match core.py logic
+    m3u_name = target_pl["name"]
+    safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
+    
+    # Check current output dir
+    manager.reload_config()
+    output_dir = Path(manager.config.get("output_dir", "./downloads"))
+    
+    # In Docker, paths might be sensitive to absolute/relative changes, rely on manager.output_dir
+    # However, if manager.output_dir is relative, we need to resolve it relative to wherever we are?
+    # Actually manager.output_dir logic in core.py handles it. Here we need to find the file.
+    # It is safest to assume absolute path usage or duplicate determination logic.
+    # For now, let's use the same logic as core:
+    
+    m3u_path = output_dir / f"{safe_name}.m3u8"
+    
+    if not m3u_path.exists():
+        return []
+        
+    tracks = []
+    try:
+        lines = m3u_path.read_text(encoding="utf-8").splitlines()
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                tracks.append(line)
+    except Exception as e:
+        logger.error(f"Error reading m3u8: {e}")
+        
+    return tracks
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

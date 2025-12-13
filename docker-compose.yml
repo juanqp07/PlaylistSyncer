@@ -1,14 +1,21 @@
-version: '3.8'
-
 services:
-  backend:
-    build: ./backend
-    container_name: music-downloader
-    restart: unless-stopped
+  opusvault:
+    build:
+      context: ./backend
+    container_name: opusvault
     ports:
-      - "8000:8000"
+      - "80:8000"
+    env_file:
+      - .env
+    dns:
+      - "8.8.8.8"
     volumes:
       - ./downloads:/app/downloads
-      - ./config:/app/config
+      - ./config.json:/app/config.json
+      - ./playlists.json:/app/playlists.json
+      - ./frontend:/app/frontend
+      # Playlist sync cache
+      - ./downloads/.sync:/app/downloads/.sync
+    restart: unless-stopped
     environment:
       - TZ=Europe/Madrid

@@ -1,3 +1,29 @@
-/backend.log
-/download.log
-/downloads
+# Secrets
+.env
+.env.*
+!env.example
+
+# User Data
+downloads/
+playlists.json
+/frontend/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+*.egg-info/
+
+# Logs
+*.log
+backend.log
+download.log
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db

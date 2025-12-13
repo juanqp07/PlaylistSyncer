@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpusVault Downloader</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>OpusVault</h1>
+            <div id="status-indicator" class="status-badge">Offline</div>
+        </header>
+
+        <main>
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="card">
+                <h2>Dashboard</h2>
+                <div class="dashboard-controls">
+                    <button id="btn-run" class="btn btn-primary">
+                        <span class="icon">▶</span> Ejecutar Ahora
+                    </button>
+                    <p id="run-status" class="status-text"></p>
+                </div>
+            </section>
+
+            <!-- Playlists Section -->
+            <section id="playlists" class="card">
+                <h2>Playlists</h2>
+                <div class="add-playlist-form">
+                    <input type="text" id="pl-name" placeholder="Nombre Playlist" class="input">
+                    <input type="text" id="pl-url" placeholder="URL Spotify/YouTube" class="input">
+                    <button id="btn-add-pl" class="btn btn-success">+</button>
+                </div>
+                <div id="playlist-list" class="list-group">
+                    <!-- Playlists rendered here -->
+                </div>
+            </section>
+
+            <!-- Config Section -->
+            <section id="config" class="card">
+                <h2>Configuración</h2>
+                <div class="form-group">
+                    <label>Directorio Salida</label>
+                    <input type="text" id="conf-output" class="input">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Proveedor de Letras</label>
+                        <select id="conf-lyrics" class="input">
+                            <option value="genius">Genius (Recomendado)</option>
+                            <option value="musixmatch">Musixmatch</option>
+                            <option value="azlyrics">AzLyrics</option>
+                            <option value="synced">Synced (Multi-source)</option>
+                            <option value="none">Desactivado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <h3
+                    style="margin-top: 1.5rem; font-size: 1rem; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                    Spotify Auth (Fix 429 Errors)</h3>
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Client ID</label>
+                        <input type="text" id="conf-client-id" class="input" placeholder="Pegar Client ID aquí">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Client Secret</label>
+                        <input type="password" id="conf-client-secret" class="input"
+                            placeholder="Pegar Client Secret aquí">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Formato</label>
+                        <select id="conf-format" class="input select">
+                            <option value="opus">Opus</option>
+                            <option value="mp3">MP3</option>
+                            <option value="m4a">M4A</option>
+                            <option value="flac">FLAC</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Bitrate</label>
+                        <select id="conf-bitrate" class="input select">
+                            <option value="96k">96k</option>
+                            <option value="128k">128k</option>
+                            <option value="160k">160k</option>
+                            <option value="320k">320k</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Concurrencia</label>
+                        <input type="number" id="conf-concurrency" class="input" min="1" max="5">
+                    </div>
+                </div>
+                <button id="btn-save-config" class="btn btn-secondary">Guardar Configuración</button>
+                <p id="config-status" class="status-text"></p>
+            </section>
+        </main>
+        <div id="tracks-modal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <span class="close-btn"
+                    onclick="document.getElementById('tracks-modal').style.display='none'">&times;</span>
+                <h3 id="modal-title">Canciones Descargadas</h3>
+                <ul id="tracks-list" class="track-list"></ul>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>

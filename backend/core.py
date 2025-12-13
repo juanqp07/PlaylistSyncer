@@ -47,13 +47,45 @@ class DownloaderManager:
                 raise
 
     def verify_dependencies(self):
-        """Verifica que spotdl y yt-dlp existan."""
+        """Verifica que spotdl y yt-dlp existan y configura spotdl."""
         for tool in ["spotdl", "yt-dlp", "ffmpeg"]:
             if not shutil.which(tool):
                 logger.critical(f"Herramienta faltante: {tool}")
-                # En un entorno de servidor, tal vez no queremos salir abruptamente,
-                # pero sí marcar el estado como degradado.
-                # Por simplicidad ahora, logueamos crítico.
+        
+        # Crear config de SpotDL
+        try:
+            # Prioritize Env Vars
+            client_id = os.getenv("SPOTIFY_CLIENT_ID") or self.config.get("spotify_client_id", "")
+            client_secret = os.getenv("SPOTIFY_CLIENT_SECRET") or self.config.get("spotify_client_secret", "")
+            lyrics_provider = self.config.get("lyrics_provider", "genius")
+            
+            conf_data = {
+                "lyrics_providers": [lyrics_provider],
+                "client_id": client_id,
+                "client_secret": client_secret
+            }
+            
+            # If user hasn't configured them, maybe don't write them? 
+            # SpotDL might error if empty strings are passed.
+            if not client_id or not client_secret:
+                conf_data.pop("client_id", None)
+                conf_data.pop("client_secret", None)
+
+            # Write config to the standard location (SpotDL 4.x+)
+            # Based on 'spotdl --generate-config' output, this is the authoritative path.
+            config_path = Path.home() / ".config" / "spotdl" / "config.json"
+            
+            try:
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                json_str = json.dumps(conf_data, indent=2)
+                config_path.write_text(json_str, encoding="utf-8")
+                logger.info(f"SpotDL config escrito en: {config_path}")
+                logger.info(f"Contenido config SpotDL: {json_str}")
+            except Exception as e:
+                logger.warning(f"No se pudo escribir config en {config_path}: {e}")
+                    
+        except Exception as e:
+            logger.warning(f"Error general creando config de SpotDL: {e}")
 
     def _run_cmd(self, cmd):
         cmd_str = ' '.join(cmd)
@@ -85,13 +117,18 @@ class DownloaderManager:
             if item is None:
                 break
             
-            url, tool = item
+            # Unpack item (supports optional m3u_name)
+            if len(item) == 3:
+                url, tool, m3u_name = item
+            else:
+                url, tool = item
+                m3u_name = None
+
             attempts = 0
             success = False
             
             extra_args = self.config.get(f"{tool}_extra_args", [])
             
-            # Construir comando
             # Construir comando
             if tool == "spotdl":
                 # Usar sync para mantener estado
@@ -106,14 +143,34 @@ class DownloaderManager:
                 fmt = self.config.get("format", "mp3")
                 bitrate = self.config.get("bitrate", "320k")
                 
+                # Determine m3u filename
+                if m3u_name:
+                    # Sanitize simple filename
+                    safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                    m3u_arg = f"{self.output_dir}/{safe_name}.m3u8"
+                else:
+                    m3u_arg = f"{self.output_dir}/{{list[0]}}.m3u8"
+
+                # Prepare base command
+                lyrics_provider = self.config.get("lyrics_provider", "genius")
+                
                 cmd = [
                     "spotdl", "sync", url, 
                     "--save-file", str(save_file), 
                     "--output", str(self.output_dir),
                     "--format", fmt,
                     "--bitrate", bitrate,
-                    "--m3u", "{list[0]}.m3u8"
+                    "--m3u", m3u_arg,
+                    "--lyrics", lyrics_provider,
+                    "--no-cache"
                 ]
+                
+                # Explicitly pass credentials if available to avoid 429 errors
+                client_id = os.getenv("SPOTIFY_CLIENT_ID") or self.config.get("spotify_client_id", "")
+                client_secret = os.getenv("SPOTIFY_CLIENT_SECRET") or self.config.get("spotify_client_secret", "")
+                
+                if client_id and client_secret and client_id != "********":
+                    cmd.extend(["--client-id", client_id, "--client-secret", client_secret])
             else:
                 cmd = ["yt-dlp", url, "-P", str(self.output_dir)]
             
@@ -128,11 +185,12 @@ class DownloaderManager:
                     success = True
                     results.append({"url": url, "status": "success", "attempts": attempts})
                 else:
+                    logger.warning(f"Error en intento {attempts}. Salida:\n" + "\n".join(lines[-10:]))
                     if attempts < max_att:
                         time.sleep(retry_cfg.get("backoff_seconds", 5))
                     else:
-                        logger.error(f"Fallo final para {url}. Log: {lines[-3:]}")
-                        results.append({"url": url, "status": "failed", "attempts": attempts, "error_log": lines[-5:]})
+                        logger.error(f"Fallo final para {url}.")
+                        results.append({"url": url, "status": "failed", "attempts": attempts, "error_log": lines[-10:]})
             
             q.task_done()
 
@@ -148,16 +206,24 @@ class DownloaderManager:
              return "spotdl"
         return self.config.get("default_tool", "spotdl")
 
-    def process_urls(self, urls):
-        """Procesa una lista de URLs en paralelo."""
-        concurrency = self.config.get("concurrency", 2)
+    def process_urls(self, urls, m3u_name=None):
+        """Procesa una lista de URLs en paralelo.
+        
+        Args:
+            urls: Lista de URLs a descargar
+            m3u_name: Nombre opcional para el archivo m3u8 (solo spotdl)
+        """
+        concurrency = self.config.get("concurrency")
+        if not concurrency or not isinstance(concurrency, int):
+            concurrency = 2
+            
         q = queue.Queue()
         results = []
         
         tasks = []
         for u in urls:
             t = self.determine_tool(u)
-            tasks.append((u, t))
+            tasks.append((u, t, m3u_name))
             
         for t in tasks:
             q.put(t)

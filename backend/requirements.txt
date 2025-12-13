@@ -2,5 +2,5 @@ fastapi
 uvicorn
 pydantic
 apscheduler
-spotdl
-yt-dlp
+spotdl>=4.4.3
+yt-dlp>=2024.11.04
