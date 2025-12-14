@@ -526,7 +526,22 @@ class DownloaderManager:
             # Normalize unicode characters to their base form (NFD)
             nfkd_form = unicodedata.normalize('NFKD', input_str)
             # Filter out non-spacing mark characters (accents)
-            return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+            ascii_str = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+            
+            # Manual replacements for edge cases NFD doesn't cover (like Ø)
+            replacements = {
+                'Ø': 'O', 'ø': 'o',
+                'Æ': 'AE', 'æ': 'ae',
+                'Œ': 'OE', 'œ': 'oe',
+                'ß': 'ss',
+                'Ð': 'D', 'ð': 'd',
+                'Þ': 'TH', 'þ': 'th',
+                'Ł': 'L', 'ł': 'l'
+            }
+            for char, repl in replacements.items():
+                ascii_str = ascii_str.replace(char, repl)
+                
+            return ascii_str
 
         renamed_count = 0
         m3u_updated_count = 0
