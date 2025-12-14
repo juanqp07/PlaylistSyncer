@@ -3,4 +3,4 @@ uvicorn
 pydantic
 apscheduler
 spotdl>=4.4.3
-yt-dlp
+yt-dlp>=2025.12.08

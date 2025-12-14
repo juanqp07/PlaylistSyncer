@@ -163,12 +163,17 @@ class LogParser:
             updates["log_level"] = "warning"
 
         # 9. YT-DLP Errors
-        elif "ERROR:" in line or "PermissionError" in line:
+        elif "ERROR:" in line or "PermissionError" in line or "AudioProviderError" in line:
              clean = line.replace("ERROR:", "").replace("downloader.core:", "").strip()
              increment = 0
              
              if "PermissionError" in line:
                  clean = "Error de permisos (No se puede escribir en disco)"
+             elif "AudioProviderError" in line:
+                 # Clean up the spotdl wrapper error
+                 clean = clean.replace("AudioProviderError:", "").strip()
+                 if "YT-DLP download error" in clean:
+                     clean = "Error de YT-DLP (Posible bloqueo o login requerido)"
              elif "Video unavailable" in clean:
                  clean = "Vídeo no disponible"
                  increment = 1 # Count unavailable videos as processed (failed)

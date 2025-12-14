@@ -353,6 +353,12 @@ class DownloaderManager:
                     "--restrict", "ascii", # Force ASCII filenames (Fixes RØZ -> ROZ and prevents redownloads)
                     "--m3u", m3u_arg
                 ]
+                
+                # Check for cookies.txt
+                cookies_path = self.config_path.parent / "cookies.txt"
+                if cookies_path.exists():
+                    cmd.extend(["--cookie-file", str(cookies_path)])
+                    
                 cmd.extend(extra_args)
 
             elif tool == "yt-dlp":
@@ -376,6 +382,11 @@ class DownloaderManager:
                     "--restrict-filenames", # Force ASCII filenames
                     url # <--- CRITICAL: WAS MISSING
                 ]
+                
+                # Check for cookies.txt
+                cookies_path = self.config_path.parent / "cookies.txt"
+                if cookies_path.exists():
+                    cmd.extend(["--cookies", str(cookies_path)])
 
                 cmd.extend(extra_ytdlp)
 
