@@ -6,7 +6,11 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **Sync:** Corregido bug crítico que impedía el inicio de las descargas (hilos huérfanos).
 - **Control:** Restaurado el botón de Stop (endpoint `/stop` ausente).
-- **Sanitización:** La herramienta ahora respeta tildes y caracteres latinos (`Ñ`, `á`, etc).
+- **Sanitization**: Corrige transcodificación de acentos (NFD).
+- **YT-DLP**: Corregido comando (URL faltante y bitrate automático "0").
+- **Robustez (YT)**: Evitado bucle infinito cuando hay vídeos borrados en una playlist (`--ignore-errors`).
+- **Estado**: Mejor detección de la canción actual tras recargar la página.
+- **Log Polish**: Traducción de "Skipping/Already exists" a "✔ Ya existe", y conteo correcto de errores ("Video unavailable") para que la barra de progreso llegue al 100%.
 
 ### Changed
 - **M3U:** Eliminado prefijo `./` para mayor compatibilidad con reproductores.
@@ -70,6 +74,11 @@ All notable changes to this project will be documented in this file.
 - **Core Unification**: CLI and Web now share the exact same download logic.
 - **UI Improvements**: Better spacing, responsive layout, and refined status states.
 - **Log Separation**: Consola Docker (Raw/Debug) vs Frontend (Pretty/Colors).
+- **Robustez (YT)**: Evitado falso error al finalizar playlist con vídeos no disponibles (Soft Success).
+- **Robustez (SpotDL)**: Detección de éxito mediante log "Saved results" (Soft Success).
+- **Sanitización**: Ahora transfiere acentos a ASCII (á->a, ñ->n) para máxima compatibilidad con Navidrome.
+- **Estado**: Mejor detección de la canción actual tras recargar la página.
+- **UI**: Barra de progreso más visible y animada. Logs con colores reales en la web.
 - **UI**: Barra de progreso más visible y animada. Logs con colores reales en la web.
 - **Robustez**: Corrección de directorios en primera ejecución (fresh install).
 

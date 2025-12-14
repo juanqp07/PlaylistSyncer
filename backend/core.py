@@ -264,7 +264,24 @@ class DownloaderManager:
                              self.broadcast_func("status", self.status)
 
              proc.wait()
-             return proc.returncode == 0, out_lines
+             
+             # Determine success
+             is_success = (proc.returncode == 0)
+             
+             # YT-DLP Soft Success: Playlist finished but some videos were unavailable (exit code != 0)
+             if not is_success and tool == "yt-dlp":
+                 # Scan for explicit "Finished" message
+                 if any("Finished downloading playlist" in l for l in out_lines):
+                     logger.info("✅ Playlist completada (con errores de vídeos no disponibles).")
+                     is_success = True
+                     
+             # SpotDL Soft Success: If sync file saved, we are good
+             if not is_success and tool == "spotdl":
+                 if any("Saved results to" in l and ".spotdl" in l for l in out_lines):
+                      logger.info("✅ SpotDL finalizado correctamente (Sync guardado).")
+                      is_success = True
+
+             return is_success, out_lines
              
         except Exception as e:
             logger.error(f"Error executing command: {e}")
@@ -340,30 +357,25 @@ class DownloaderManager:
             elif tool == "yt-dlp":
                 # YT-DLP Command
                 extra_ytdlp = self.config.get("ytdlp_extra_args", [])
-                cmd = ["yt-dlp", url, "-P", str(self.output_dir)]
                 
                 # Format Handling
-                # spotdl supports: mp3, flac, m4a, opus, ogg, wav
-                # yt-dlp supports these via --audio-format
-                fmt = self.config.get("format", "mp3") # Default to mp3 for better compatibility if not set
-                
-                # Bitrate handling (optional in config, default to decent quality)
-                # yt-dlp --audio-quality: 0 (best) to 9 (worst) for VBR, or 128K etc.
+                fmt = self.config.get("format", "mp3") 
                 bitrate = self.config.get("bitrate", "192k") 
                 
-                # Ensure ffmpeg extraction
-                cmd.append("-x")
-                cmd.extend(["--audio-format", fmt])
-                
-                # Pass explicit quality if it looks like a bitrate
-                if bitrate and "k" in str(bitrate).lower():
-                     cmd.extend(["--audio-quality", bitrate])
-                else:
-                     # Default to 0 (best VBR) if no specific bitrate
-                     cmd.extend(["--audio-quality", "0"])
-                     
-                # Add output template for yt-dlp too to be consistent
-                cmd.extend(["-o", "%(artist)s - %(title)s.%(ext)s"])
+                # Construct command properly
+                cmd = [
+                    "yt-dlp",
+                    "--ignore-errors", # Skip deleted videos
+                    "--extract-audio",
+                    "--audio-format", fmt,
+                    "--yes-playlist",
+                    "--no-progress", # We parse the [download] lines manually
+                    "--output", f"{self.output_dir}/%(artist)s - %(title)s.%(ext)s",
+                    "--audio-quality", "0", # Best quality (VBR) - User requested to ignore specific bitrate for yt-dlp
+                    url # <--- CRITICAL: WAS MISSING
+                ]
+
+                cmd.extend(extra_ytdlp)
 
                 cmd.extend(extra_ytdlp)
             
@@ -508,7 +520,14 @@ class DownloaderManager:
         3. Updates M3U8 files to match new names
         """
         import re
+        import unicodedata
         
+        def remove_accents(input_str):
+            # Normalize unicode characters to their base form (NFD)
+            nfkd_form = unicodedata.normalize('NFKD', input_str)
+            # Filter out non-spacing mark characters (accents)
+            return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
         renamed_count = 0
         m3u_updated_count = 0
         file_map = {} # old_name -> new_name
@@ -516,7 +535,7 @@ class DownloaderManager:
         # Regex to find brackets at the end of stem: "Song Title [ID].ext"
         bracket_pattern = re.compile(r'\s*\[[^\]]+\]')
         
-        msg = "🔪 Iniciando sanitización de archivos..."
+        msg = "🔪 Iniciando sanitización de archivos (Transliteración)..."
         logger.info(msg)
         if self.broadcast_func: self.broadcast_func("log", msg)
         
@@ -528,16 +547,18 @@ class DownloaderManager:
             stem = file.stem
             suffix = file.suffix
             
-            # Remove brackets (Youtube IDs)
+            # 1. Remove brackets (Youtube IDs)
             new_stem = bracket_pattern.sub('', stem)
             
-            # Remove characters that are NOT alphanumeric, spaces, or safe punctuation
-            # isalnum() in Python 3 allows Unicode letters (á, é, í, ñ...), which fixes the broken accents.
-            # Allowed special chars: space, hyphen, underscore, dot, parentheses, comma, apostrophe, ampersand
+            # 2. Transliterate (Accents -> ASCII) ie: á -> a, ñ -> n
+            new_stem = remove_accents(new_stem)
+
+            # 3. Clean Special Chars (Allow only A-Z, 0-9, spaces, and safe punctuation)
+            # Now that we are ASCII only, strict filtering is easier
             allowed_chars = " -_.,()'&"
             new_stem = "".join(c for c in new_stem if c.isalnum() or c in allowed_chars).strip()
             
-            # Clean up double spaces
+            # 4. Clean up double spaces
             new_stem = re.sub(r'\s+', ' ', new_stem).strip()
             
             # If changed, rename
