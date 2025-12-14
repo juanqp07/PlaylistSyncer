@@ -15,6 +15,5 @@ services:
       # Playlist sync cache
       - ./downloads/.sync:/app/downloads/.sync
     restart: unless-stopped
-    user: "1000:1000" # Run as root to avoid Permission Errors on downloads
     environment:
       - TZ=Europe/Madrid
