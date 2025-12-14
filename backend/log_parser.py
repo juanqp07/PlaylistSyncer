@@ -134,14 +134,27 @@ class LogParser:
              # Extract filename
              try:
                  parts = line.split("Destination:")[1].strip()
-                 # Remove path
+                 # Keep full path for M3U logic if needed (though [ExtractAudio] is better for final)
+                 full_path = parts
+                 
+                 # Remove path for display
                  if "/" in parts: parts = parts.rsplit("/", 1)[1]
-                 # Remove ext
+                 # Remove ext for display
                  if "." in parts: parts = parts.rsplit(".", 1)[0]
                  
                  updates["current_song"] = parts
                  updates["state"] = "downloading"
                  updates["log_message"] = f"{C_CYAN}⬇ Descargando: {parts}{C_RESET}"
+             except: pass
+
+        # 7c. YT-DLP Extract Audio (Final Filename)
+        elif "[ExtractAudio] Destination:" in line:
+             try:
+                 parts = line.split("Destination:")[1].strip()
+                 # This is the final file!
+                 if "/" in parts: 
+                     filename = parts.rsplit("/", 1)[1]
+                     updates["new_filename"] = filename
              except: pass
 
         # 8. YT-DLP Warnings
@@ -186,7 +199,23 @@ class LogParser:
              updates["log_message"] = f"{C_RED}❌ Error: {clean}{C_RESET}"
              updates["log_level"] = "error"
 
-        # 10. Skip Noise (Webpage, etc)
+        # 10. YT-DLP Specific Events (New)
+        elif "[download] Download completed" in line:
+             updates["downloaded_increment"] = 1
+             # Try to find current song if possible, or just generic success
+             # Unfortunately yt-dlp doesn't repeat the filename here easily unless we tracked it.
+             # But we can just say "Completed".
+             updates["log_message"] = f"{C_GREEN}✔ Descarga completada{C_RESET}"
+             
+        elif "Deleting original file" in line:
+             # "Deleting original file downloads/NA - ... (pass -k to keep)"
+             updates["log_message"] = f"{C_CYAN}🧹 Limpiando archivos temporales...{C_RESET}"
+             
+        elif "[info]" in line and "Downloading 1 format(s)" in line:
+             # "[info] 6WrVXWgn094: Downloading 1 format(s): 251"
+             updates["log_message"] = f"{C_CYAN}⚡ Iniciando descarga de formatos...{C_RESET}"
+
+        # 11. Skip Noise (Webpage, etc)
         elif "Downloading webpage" in line or "Extracting URL" in line:
              pass # Silent
 

@@ -15,5 +15,6 @@ services:
       # Playlist sync cache
       - ./downloads/.sync:/app/downloads/.sync
     restart: unless-stopped
+    user: "0:0"
     environment:
       - TZ=Europe/Madrid

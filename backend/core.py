@@ -165,7 +165,7 @@ class DownloaderManager:
         except Exception as e:
             logger.warning(f"Error general verificando dependencias: {e}")
 
-    def _run_cmd(self, cmd: List[str]) -> tuple[bool, List[str]]:
+    def _run_cmd(self, cmd: List[str], m3u_path: Optional[str] = None) -> tuple[bool, List[str]]:
         if self.stop_requested.is_set():
             return False, []
             
@@ -245,7 +245,16 @@ class DownloaderManager:
                          # User requested "logs normales" in console
                          logger.info(line)
                     
-                     # 3. FRONTEND BROADCAST (Pretty/Modified)
+                     # 3. M3U Generation (Manual for YT-DLP)
+                     if updates.get("new_filename") and m3u_path and tool == "yt-dlp":
+                         try:
+                             with open(m3u_path, "a", encoding="utf-8") as f:
+                                 f.write(updates["new_filename"] + "\n")
+                             logger.info(f"📝 Added to M3U: {updates['new_filename']}")
+                         except Exception as e:
+                             logger.error(f"Failed to append to M3U: {e}")
+
+                     # 4. FRONTEND BROADCAST (Pretty/Modified)
                      if updates:
                          if "downloaded_increment" in updates:
                              self.status["downloaded"] += updates.pop("downloaded_increment")
@@ -256,7 +265,7 @@ class DownloaderManager:
                                  self.broadcast_func("log", updates["log_message"])
                          
                          for k, v in updates.items():
-                             if k not in ["log_message", "log_level", "log_raw"]:
+                             if k not in ["log_message", "log_level", "log_raw", "new_filename"]:
                                  self.status[k] = v
                         
                          # CRITICAL: Broadcast status immediately after update
@@ -324,6 +333,12 @@ class DownloaderManager:
         
             # Command Selection
             cmd = []
+            m3u_arg = None
+            
+            if m3u_name:
+                 safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                 m3u_arg = f"{self.output_dir}/{safe_name}.m3u8"
+                 
             if tool == "spotdl":
                 # Construir comando (SpotDL)
                 import hashlib
@@ -338,10 +353,8 @@ class DownloaderManager:
                 bitrate = self.config.get("bitrate", "192k")
                 
                 # Determine m3u filename parameter
-                if m3u_name:
-                    safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
-                    m3u_arg = f"{self.output_dir}/{safe_name}.m3u8"
-                else:
+                # m3u_arg is already calculated above if m3u_name exists
+                if not m3u_arg:
                     m3u_arg = f"{self.output_dir}/{{list[0]}}.m3u8"
 
                 cmd = [
@@ -411,7 +424,7 @@ class DownloaderManager:
                 logger.info(msg)
                 if self.broadcast_func: self.broadcast_func("log", msg)
                 
-                success, logs = self._run_cmd(cmd)
+                success, logs = self._run_cmd(cmd, m3u_arg)
                 
                 if self.stop_requested.is_set():
                     break
