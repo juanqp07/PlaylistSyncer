@@ -2,6 +2,18 @@ Registro de Cambios
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.6.0] - 2025-12-14
+### Añadido
+- **Modo Turbo (Batch)**: Procesamiento en lotes de 50 canciones para playlists de YouTube. Reduce drásticamente el tiempo de inicio y consumo de CPU.
+- **M3U Estándar Profesional**: Generación de archivos `.m3u8` con metadatos completos (`#EXTM3U`, `#EXTINF`), duración exacta (vía `ffprobe`) y títulos correctos.
+- **Logs Inteligentes**: Nueva visualización compacta para el procesamiento de lotes ("Procesando lote de 50 canciones...").
+
+### Corregido
+- **Estabilidad FFmpeg**: Forzado modo "single-thread" en SpotDL para evitar bloqueos de archivos y errores de conversión durante descargas masivas.
+- **Duplicados M3U**: Lógica de anti-duplicados reescrita para ser estricta (línea exacta) y evitar bucles infinitos de reescritura.
+- **Protección de Sistema**: Añadido manejo de errores para la creación de carpetas `.sync` en sistemas de archivos restringidos.
+- **Truncado de Nombres**: Solucionado error donde nombres con puntos (ej: `feat.`) se cortaban incorrectamente en la lista de reproducción.
+
 ## [1.5.1] - 2025-12-14
 ### Corregido
 - **M3U Glue Bug**: Solucionado error crítico donde los nombres de archivos se pegaban en una sola línea en el archivo M3U. Ahora se fuerza el salto de línea.
