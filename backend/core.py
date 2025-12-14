@@ -451,9 +451,8 @@ class DownloaderManager:
             urls: Lista de URLs a descargar
             m3u_name: Nombre opcional para el archivo m3u8 (solo spotdl)
         """
-        concurrency = self.config.get("concurrency")
-        if not concurrency or not isinstance(concurrency, int):
-            concurrency = 2
+        # Forced Sequential Execution (User Request)
+        concurrency = 1
             
         q = queue.Queue()
         results = []

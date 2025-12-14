@@ -189,7 +189,7 @@ async def websocket_endpoint(websocket: WebSocket):
 # Models
 class ConfigUpdate(BaseModel):
     output_dir: Optional[str] = None
-    concurrency: Optional[int] = 2
+    # concurrency removed (forced to 1)
     format: Optional[str] = "opus"
     spotdl_extra_args: List[str] = None
     ytdlp_extra_args: List[str] = None

@@ -44,7 +44,7 @@ export class UI {
             outInput.title = "Gestionado por Docker (Volumen)";
             outInput.parentElement.style.display = 'none';
         }
-        document.getElementById('conf-concurrency').value = data.concurrency || 2;
+        // concurrency removed
         document.getElementById('conf-format').value = data.format || "opus";
         document.getElementById('conf-schedule').value = data.schedule_interval_hours || 0;
 
