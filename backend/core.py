@@ -143,6 +143,47 @@ class DownloaderManager:
         if self.broadcast_func:
             self.broadcast_func("status", self.status)
 
+    def _get_audio_metadata(self, filename_stub: str) -> tuple[str, int]:
+        """
+        Resolves full filename (w/ extension) and gets duration.
+        Returns (full_filename, duration_seconds).
+        """
+        # 1. Resolve File
+        target_file = None
+        # Try exact match first
+        p = self.output_dir / filename_stub
+        if p.exists():
+            target_file = p
+        else:
+            # Try searching with common extensions
+            for ext in [".opus", ".mp3", ".m4a", ".flac", ".ogg"]:
+                p = self.output_dir / (filename_stub + ext)
+                if p.exists():
+                    target_file = p
+                    break
+        
+        if not target_file:
+            # Fallback: return original stub and 0 duration (valid-ish)
+            return filename_stub, 0
+            
+        # 2. Get Duration via ffprobe
+        duration = 0
+        try:
+            cmd = [
+                "ffprobe", 
+                "-v", "error", 
+                "-show_entries", "format=duration", 
+                "-of", "default=noprint_wrappers=1:nokey=1", 
+                str(target_file)
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0:
+                duration = int(float(res.stdout.strip()))
+        except:
+            pass
+            
+        return target_file.name, duration
+
     def reload_config(self):
         """Recarga la configuración desde el archivo JSON."""
         if not self.config_path.exists():
@@ -261,14 +302,54 @@ class DownloaderManager:
                          logger.info(line)
                     
                      # 3. M3U Generation (Manual for ALL tools)
-                     # We do this manually because we are running tools 1-by-1 and want to append safely
                      if updates.get("new_filename") and m3u_path:
                          try:
-                             with open(m3u_path, "a", encoding="utf-8") as f:
-                                 # Defensive: Prepend \n to ensure we are on a new line (fixes glued lines)
-                                 # This might create empty lines, but M3U parsers ignore them.
-                                 f.write("\n" + updates["new_filename"])
-                             logger.info(f"📝 Added to M3U: {updates['new_filename']}")
+                             # Resolve real filename and duration
+                             real_name, duration = self._get_audio_metadata(updates["new_filename"])
+                             
+                             # Prepare M3U Entry
+                             # Logic: If duration > 0, we found the file (with ext), so stem is safe.
+                             # If duration == 0, we failed to find file, so real_name might typically be raw name (no ext).
+                             # If raw name has dots (e.g. "Feat."), stem would truncate it. Avoid that.
+                             if duration > 0:
+                                 title = Path(real_name).stem 
+                             else:
+                                 title = real_name
+
+                             extinf_line = f"#EXTINF:{duration},{title}"
+                             file_line = f"./{real_name}"
+                             
+                             # Read current M3U content
+                             current_lines = []
+                             has_header = False
+                             
+                             if os.path.exists(m3u_path):
+                                 with open(m3u_path, "r", encoding="utf-8") as f:
+                                     raw_lines = f.read().splitlines()
+                                     current_lines = [l.strip() for l in raw_lines if l.strip()]
+                                     if raw_lines and raw_lines[0].strip() == "#EXTM3U":
+                                         has_header = True
+                             
+                             # Check duplicates (check if filename line exists)
+                             if file_line not in current_lines:
+                                 with open(m3u_path, "a", encoding="utf-8") as f:
+                                     # Add Header if missing/new file
+                                     if not has_header and os.path.getsize(m3u_path) == 0:
+                                          f.write("#EXTM3U\n")
+                                     elif not has_header and not os.path.exists(m3u_path): # Should be covered by size check but safe
+                                          f.write("#EXTM3U\n")
+
+                                     # Defensive newline if needed (not empty file)
+                                     if os.path.exists(m3u_path) and os.path.getsize(m3u_path) > 0:
+                                         # Check last char? simplified: just Ensure usage of new lines
+                                         f.write("\n")
+                                     
+                                     f.write(f"{extinf_line}\n{file_line}")
+                                     
+                                 logger.info(f"📝 Added to M3U: {real_name}")
+                             else:
+                                 logger.info(f"⏭ En M3U (Skipping add): {real_name}")
+                                 
                          except Exception as e:
                              logger.error(f"Failed to append to M3U: {e}")
 
@@ -361,10 +442,18 @@ class DownloaderManager:
                 # Construir comando (SpotDL)
                 import hashlib
                 sync_dir = self.output_dir / ".sync"
-                sync_dir.mkdir(parents=True, exist_ok=True)
+                try:
+                    sync_dir.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    logger.warning(f"⚠️ No se pudo crear directorio .sync: {e}")
                 
                 # If url is a search query (no protocol), hash might be ugly, but functional
-                url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
+                if isinstance(url, list):
+                     # For batch, hash the first item + count to be unique enough
+                     url_hash = hashlib.md5((url[0] + str(len(url))).encode("utf-8")).hexdigest()
+                else: 
+                     url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
+                     
                 save_file = sync_dir / f"{url_hash}.spotdl"
                 
                 # Obtener formato y bitrate
@@ -372,35 +461,47 @@ class DownloaderManager:
                 bitrate = self.config.get("bitrate", "192k")
                 
                 # Determine Mode: URL vs Search Query
-                is_url = url.startswith("http")
-                
                 # Hybrid M3U Logic
                 # If URL (Spotify Playlist/Track): Use SpotDL native --m3u (User prefers this)
                 # If Title (YouTube Extraction): Use Manual Append (SpotDL overwrite fix)
+                # Hybrid M3U Logic
+                run_cmd_m3u_arg = None 
                 
-                run_cmd_m3u_arg = None # Default: No manual append in _run_cmd
+                # Input Handling (Batch vs Single)
+                inputs = []
+                is_batch = isinstance(url, list)
+                if is_batch:
+                    inputs = url
+                    # For batches (TITLES), we are definitely in Manual Mode
+                    # No sync file, No native M3U
+                    run_cmd_m3u_arg = m3u_arg
+                    # Use first title for display/hash if needed, or just "Batch" in logging
+                else:
+                    inputs = [url]
+                
+                # Determine Mode (URL vs Title)
+                # If ANY input starts with http, treat as URL mode (likely single)
+                # If batch, assume Titles (Manual)
+                is_url_mode = any(u.startswith("http") for u in inputs)
                 
                 # Base Command
+                cmd.extend(["spotdl", "download"])
+                cmd.extend(inputs) # Add all titles/urls
+                
                 cmd.extend([
-                    "spotdl", "download", url, 
                     "--output", f"{self.output_dir}/{{artist}} - {{title}}",
                     "--format", fmt,
                     "--bitrate", bitrate,
                     "--restrict", "ascii", # Force ASCII filenames
+                    "--threads", "1", # CRITICAL: Force sequential processing to avoid FFmpeg/Resource errors
                 ])
 
-                if is_url:
-                    # Native Mode (Spotify Playlist/URL)
-                    # Use Sync File for Spotify Playlists to allow re-syncing
+                if is_url_mode and not is_batch:
+                    # Native Mode (Single Spotify Playlist/URL)
                     cmd.extend(["--save-file", str(save_file)])
-                    # Use Native M3U
                     cmd.extend(["--m3u", m3u_arg])
                 else:
-                    # Manual Mode (Title Search from YouTube)
-                    # Do NOT use sync file (It's a one-off search)
-                    # Do NOT use native M3U (We append manually)
-                    pass 
-                    # Set manual flag for _run_cmd
+                    # Manual Mode (Titles or Batch)
                     run_cmd_m3u_arg = m3u_arg
 
                 
@@ -433,7 +534,11 @@ class DownloaderManager:
                     break
                     
                 attempts += 1
-                msg = f"✨ Procesando: {url} | 🔧 {tool} (Intento {attempts})"
+                if isinstance(url, list):
+                     msg = f"✨ Procesando lote de {len(url)} canciones | 🔧 {tool} (Intento {attempts})"
+                else:
+                     msg = f"✨ Procesando: {url} | 🔧 {tool} (Intento {attempts})"
+                
                 logger.info(msg)
                 if self.broadcast_func: self.broadcast_func("log", msg)
                 
@@ -460,9 +565,13 @@ class DownloaderManager:
                                         
                                     p = Path(line)
                                     filename = p.name
+                                    # Enforce ./ prefix to match _run_cmd logic and user preference
+                                    if not filename.startswith("./"):
+                                        filename = f"./{filename}"
                                     new_lines.append(filename)
                                 
-                                m3u_file.write_text("\n".join(new_lines), encoding='utf-8')
+                                # Ensure trailing newline
+                                m3u_file.write_text("\n".join(new_lines) + "\n", encoding='utf-8')
                                 logger.info(f"Corregidas rutas en M3U: {m3u_file}")
                         except Exception as e:
                             logger.error(f"Error procesando M3U: {e}")
@@ -547,11 +656,22 @@ class DownloaderManager:
                         logger.info(msg)
                         if self.broadcast_func: self.broadcast_func("log", msg)
 
+                        # Optimization: Batch titles to avoid 66x python startup overhead
+                        # Batch size 50 is safe for command line length
+                        batch_size = 50
+                        current_batch = []
+                        
                         for title in titles:
                             if title.strip():
-                                # Clean title for search (remove [Official Video] etc?)
-                                # SpotDL usually handles it, but let's pass it raw first
-                                tasks.append((title.strip(), "spotdl", m3u_name))
+                                current_batch.append(title.strip())
+                                if len(current_batch) >= batch_size:
+                                    tasks.append((current_batch, "spotdl", m3u_name))
+                                    current_batch = []
+                        
+                        # Add remaining
+                        if current_batch:
+                            tasks.append((current_batch, "spotdl", m3u_name))
+                            
                     else:
                          logger.error(f"❌ Error extrayendo playlist de YT: {res.stderr}")
                          # Fallback: try adding url directly? No, user doesn't want yt-dlp download
@@ -567,10 +687,21 @@ class DownloaderManager:
         # Init status
         self.stop_requested.clear() # Reset stop flag
         self.status["state"] = "starting"
-        self.status["total_songs"] = len(tasks) # Set correct total from tasks
+        
+        # Calculate strict total songs (accounting for batches)
+        total_count = 0
+        for t in tasks:
+            # t is (url_or_list, tool, m3u_name)
+            input_data = t[0]
+            if isinstance(input_data, list):
+                total_count += len(input_data)
+            else:
+                total_count += 1
+                
+        self.status["total_songs"] = total_count
         self.status["downloaded"] = 0
         
-        msg = f"🚀 Iniciando descarga de {len(tasks)} canciones..."
+        msg = f"🚀 Iniciando descarga de {total_count} canciones..."
         logger.info(msg)
         if self.broadcast_func:
              self.broadcast_func("log", msg)

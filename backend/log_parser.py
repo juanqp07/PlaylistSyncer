@@ -66,10 +66,14 @@ class LogParser:
              # Remove "(file already exists) (duplicate)"
              clean = clean.replace("(file already exists)", "").replace("(duplicate)", "").strip()
              
+             clean = clean.replace('"', '') # Remove quotes
+             
              if "http" not in clean: 
                  updates["current_song"] = clean
                  updates["downloaded_increment"] = 1 # Count duplicates as processed!
                  updates["log_message"] = f"{C_GREEN}✔ Ya existe: {clean}{C_RESET}"
+                 # Capture filename for M3U rebuild (even if skipped)
+                 updates["new_filename"] = clean
 
         # 4. Rate Limits (Friendly)
         elif "rate/request limit" in line:
