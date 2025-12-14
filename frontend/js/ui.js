@@ -104,16 +104,19 @@ export class UI {
 
             // Format time 
             const date = new Date(entry.created_at + "Z"); // Assume UTC DB
-            const timeAgo = this.timeAgo(date);
+            const formattedDate = date.toLocaleString('es-ES', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
             const duration = Math.round(entry.duration_seconds);
 
             item.innerHTML = `
                 <div class="h-header">
                     <strong>${entry.playlist_name}</strong>
-                    <span class="h-time">${timeAgo}</span>
+                    <span class="h-time">${formattedDate}</span>
                 </div>
                 <div class="h-details">
-                    <span>${entry.items_downloaded} / ${entry.total_items} items</span>
+                    <span>Canciones: <strong>${entry.items_downloaded}</strong> / ${entry.total_items}</span>
                     <span>⏱ ${duration}s</span>
                 </div>
             `;
@@ -148,7 +151,7 @@ export class UI {
         const activeStates = ['starting', 'processing', 'downloading', 'retrying'];
         const isRunning = activeStates.includes(data.state);
 
-        const actionsContainer = document.querySelector('.actions');
+        const actionsContainer = document.getElementById('dashboard-actions');
         if (actionsContainer) {
             if (isRunning) actionsContainer.classList.add('running');
             else actionsContainer.classList.remove('running');
@@ -195,13 +198,23 @@ export class UI {
             percent = Math.round((data.downloaded / data.total_songs) * 100);
         }
 
-        if (data.state === 'idle' && data.total_songs === 0) {
+        // Logic: specific state for "Running but unknown total"
+        if (isRunning && data.total_songs === 0) {
+            progressBar.style.width = '100%';
+            progressBar.style.background = 'repeating-linear-gradient(45deg, var(--primary), var(--primary) 10px, #4c1d95 10px, #4c1d95 20px)';
+            progressText.textContent = "Esperando datos...";
+            document.getElementById('status-downloaded').textContent = '-';
+            document.getElementById('status-total-count').textContent = '-';
+        }
+        else if (data.state === 'idle' && data.total_songs === 0) {
             progressBar.style.width = '0%';
+            progressBar.style.background = 'var(--primary-gradient)'; // Reset style
             progressText.textContent = '--%';
             document.getElementById('status-downloaded').textContent = '-';
             document.getElementById('status-total-count').textContent = '-';
         } else {
             progressBar.style.width = `${percent}%`;
+            progressBar.style.background = 'var(--primary-gradient)'; // Reset style
             progressText.textContent = `${percent}%`;
             document.getElementById('status-downloaded').textContent = data.downloaded;
             document.getElementById('status-total-count').textContent = data.total_songs;

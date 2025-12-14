@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 - **Idioma:** Localización completa al Español (UI, Logs, README).
 - **Concurrencia:** Eliminada la descarga paralela. Ahora las descargas son secuenciales (1 en 1) para mayor estabilidad.
 - **UI:** Corrección de alineación en botones de playlist y mejoras de estilo.
+- **Historial:** Añadido fecha/hora exacta y contador de canciones descargadas.
+- **Audio:** Añadido selector de Bitrate (Auto, 320k, 256k, 192k, 128k).
 - **CI/CD:** Docker tagging automatizado basado en versión del código.
 
 ## [1.3.0] - 2025-12-13

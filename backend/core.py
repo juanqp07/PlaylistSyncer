@@ -206,7 +206,7 @@ class DownloaderManager:
              while True:
                  # Check stop flag aggressively
                  if self.stop_requested.is_set():
-                     logger.info("STOP detected inside _run_cmd loop.")
+                     logger.info("🛑 Interrupción de comando detectada.")
                      try:
                          # Ensure we kill this specific process immediately if stop is set
                          os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
@@ -274,6 +274,10 @@ class DownloaderManager:
                          for k, v in updates.items():
                              if k not in ["log_message", "log_level", "log_raw"]:
                                  self.status[k] = v
+                        
+                         # CRITICAL: Broadcast status immediately after update
+                         if self.broadcast_func:
+                             self.broadcast_func("status", self.status)
 
              proc.wait()
              return proc.returncode == 0, out_lines
@@ -387,7 +391,7 @@ class DownloaderManager:
             
             while attempts < max_att:
                 if self.stop_requested.is_set():
-                    logger.info("Stop detected in worker loop. Aborting.")
+                    logger.info("🛑 Deteniendo bucle principal...")
                     break
                     
                 attempts += 1
