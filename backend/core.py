@@ -350,6 +350,7 @@ class DownloaderManager:
                     "--output", f"{self.output_dir}/{{artist}} - {{title}}",
                     "--format", fmt,
                     "--bitrate", bitrate,
+                    "--restrict", "ascii", # Force ASCII filenames (Fixes RØZ -> ROZ and prevents redownloads)
                     "--m3u", m3u_arg
                 ]
                 cmd.extend(extra_args)
@@ -372,6 +373,7 @@ class DownloaderManager:
                     "--no-progress", # We parse the [download] lines manually
                     "--output", f"{self.output_dir}/%(artist)s - %(title)s.%(ext)s",
                     "--audio-quality", "0", # Best quality (VBR) - User requested to ignore specific bitrate for yt-dlp
+                    "--restrict-filenames", # Force ASCII filenames
                     url # <--- CRITICAL: WAS MISSING
                 ]
 
