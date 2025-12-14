@@ -191,7 +191,6 @@ async def websocket_endpoint(websocket: WebSocket):
 # Models
 class ConfigUpdate(BaseModel):
     output_dir: Optional[str] = None
-    # concurrency removed (forced to 1)
     format: Optional[str] = "opus"
     bitrate: Optional[str] = "192k"
     spotdl_extra_args: List[str] = None
@@ -208,7 +207,7 @@ def get_config():
     manager.reload_config()
     config = manager.config.copy()
     config["is_docker"] = (BASE_DIR.name == "app")
-    config["version"] = "1.4.2" 
+    config["version"] = "1.5.1" 
     return config
 
 @app.get("/status")

@@ -27,7 +27,6 @@ async function loadConfig() {
 async function saveConfig() {
     const btn = document.getElementById('btn-save-config');
     const outputDir = document.getElementById('conf-output').value;
-    // concurrency removed
     const format = document.getElementById('conf-format').value;
     const bitrate = document.getElementById('conf-bitrate').value;
     const schedule = parseInt(document.getElementById('conf-schedule').value);
@@ -36,7 +35,6 @@ async function saveConfig() {
         btn.disabled = true;
         await api.saveConfig({
             output_dir: outputDir,
-            // concurrency removed
             format: format,
             bitrate: bitrate
         });

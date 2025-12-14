@@ -1,18 +1,36 @@
-Changelog
+Registro de Cambios
 
-All notable changes to this project will be documented in this file.
+Todos los cambios notables en este proyecto serán documentados en este archivo.
+
+## [1.5.1] - 2025-12-14
+### Corregido
+- **M3U Glue Bug**: Solucionado error crítico donde los nombres de archivos se pegaban en una sola línea en el archivo M3U. Ahora se fuerza el salto de línea.
+- **Optimización SpotDL**: Desactivada la creación de archivos `.sync` innecesarios para búsquedas individuales de YouTube.
+- **Barra de Progreso**: Corregido el conteo inicial de canciones para que la barra de progreso funcione correctamente con playlists de YouTube.
+
+## [1.5.0] - 2025-12-14
+### Añadido
+- **Arquitectura Solo-SpotDL**: Ahora utiliza SpotDL para todas las descargas, asegurando metadatos y nombres de archivo de alta calidad.
+- **Soporte de Playlists de YouTube**: Extrae automáticamente los títulos de las playlists de YouTube y los busca/descarga a través de SpotDL.
+- **Lógica Híbrida M3U**: Utiliza la generación nativa de M3U de SpotDL para enlaces de Spotify, y un sistema robusto de añadido manual para importaciones de YouTube para evitar sobrescrituras.
+- **Logs en Frontend**: Salida de terminal mejorada para mostrar la playlist actual y el estado de extracción.
+
+### Cambiado
+- **Eliminada Concurrencia**: Desactivadas las descargas simultáneas para evitar límites de velocidad (Rate Limits) y mejorar la estabilidad.
+- **Mejora en Seguridad de Procesos**: La eliminación de procesos ahora se limita al usuario actual para evitar problemas en el sistema.
+- **Limpieza de UI**: Eliminada la configuración de concurrencia de la interfaz web.
 
 ## [1.4.2] - 2025-12-14
-### Fixed
+### Corregido
 - **Sync:** Corregido bug crítico que impedía el inicio de las descargas (hilos huérfanos).
 - **Control:** Restaurado el botón de Stop (endpoint `/stop` ausente).
-- **Sanitization**: Corrige transcodificación de acentos (NFD).
+- **Sanitización**: Corrige transcodificación de acentos (NFD).
 - **YT-DLP**: Corregido comando (URL faltante y bitrate automático "0").
 - **Robustez (YT)**: Evitado bucle infinito cuando hay vídeos borrados en una playlist (`--ignore-errors`).
 - **Estado**: Mejor detección de la canción actual tras recargar la página.
-- **Log Polish**: Traducción de "Skipping/Already exists" a "✔ Ya existe", y conteo correcto de errores ("Video unavailable") para que la barra de progreso llegue al 100%.
+- **Pulido de Logs**: Traducción de "Skipping/Already exists" a "✔ Ya existe", y conteo correcto de errores ("Video unavailable") para que la barra de progreso llegue al 100%.
 
-### Changed
+### Cambiado
 - **M3U:** Eliminado prefijo `./` para mayor compatibilidad con reproductores.
 - **UI:** Botón de "Reparar" ahora es ámbar para mejor visibilidad.
 

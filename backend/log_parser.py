@@ -88,6 +88,10 @@ class LogParser:
             song_name = match.group(1) if match else "Canción"
             updates["downloaded_increment"] = 1
             updates["current_song"] = f"✔ {song_name}"
+            # Capture filename for manual M3U appending
+            # SpotDL typically outputs: Downloaded "Artist - Title.mp3"
+            # We trust this is the filename relative to output_dir
+            updates["new_filename"] = song_name
             updates["log_message"] = f"{C_GREEN}✔ Completado: {song_name}{C_RESET}"
         
         # 5b. SpotDL Lookup Error
