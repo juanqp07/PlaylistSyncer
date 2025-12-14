@@ -477,6 +477,12 @@ class DownloaderManager:
         self.status["total_songs"] = 0 # Reset count for new batch
         self.status["downloaded"] = 0
         if self.broadcast_func: self.broadcast_func("status", self.status)
+        
+        threads = []
+        for _ in range(concurrency):
+            th = threading.Thread(target=self._download_worker, args=(q, results), daemon=True)
+            th.start()
+            threads.append(th)
             
         for t in tasks:
             if self.stop_requested.is_set(): break
@@ -485,8 +491,18 @@ class DownloaderManager:
         # Wait
         q.join()
         
-        # Kill any remaining
-        self.stop()
+        # Stop workers gracefully
+        for _ in threads:
+            q.put(None)
+        
+        # Join threads with timeout
+        for th in threads:
+            th.join(timeout=1.0)
+        
+        # Reset status to idle when done
+        self.status["state"] = "idle"
+        self.status["current_song"] = None
+        if self.broadcast_func: self.broadcast_func("status", self.status)
         
         return results
 
@@ -494,7 +510,7 @@ class DownloaderManager:
         """
         Renames files in downloads directory to remove:
         1. Youtube IDs in brackets e.g. [dQw4w9WgXcQ]
-        2. Emojis and special characters
+        2. Emojis and special characters (Preserving Spanish accents)
         3. Updates M3U8 files to match new names
         """
         import re
@@ -515,11 +531,14 @@ class DownloaderManager:
             stem = file.stem
             suffix = file.suffix
             
-            # Remove brackets
+            # Remove brackets (Youtube IDs)
             new_stem = bracket_pattern.sub('', stem)
             
-            # Remove emojis logic (basic range check using ascii encode/decode)
-            new_stem = new_stem.encode('ascii', 'ignore').decode('ascii').strip()
+            # Remove characters that are NOT alphanumeric, spaces, or safe punctuation
+            # isalnum() in Python 3 allows Unicode letters (á, é, í, ñ...), which fixes the broken accents.
+            # Allowed special chars: space, hyphen, underscore, dot, parentheses, comma, apostrophe, ampersand
+            allowed_chars = " -_.,()'&"
+            new_stem = "".join(c for c in new_stem if c.isalnum() or c in allowed_chars).strip()
             
             # Clean up double spaces
             new_stem = re.sub(r'\s+', ' ', new_stem).strip()
@@ -533,11 +552,11 @@ class DownloaderManager:
                         file.rename(target)
                         file_map[original_name] = new_name
                         renamed_count += 1
-                        logger.info(f"Renamed: {original_name} -> {new_name}")
+                        logger.info(f"✏️  Renamed: {original_name:<30} -> {new_name}")
                     else:
-                        logger.warning(f"Target exists, skipping: {new_name}")
+                        logger.warning(f"⚠️  Target matches, skipping: {new_name}")
                 except Exception as e:
-                    logger.error(f"Error renaming {original_name}: {e}")
+                    logger.error(f"❌ Error renaming {original_name}: {e}")
 
         # 2. Update M3U Files
         if file_map:
@@ -575,26 +594,9 @@ class DownloaderManager:
                         m3u_updated_count += 1
                         
                 except Exception as e:
-                    logger.error(f"Error updating M3U {m3u.name}: {e}")
+                    logger.error(f"❌ Error updating M3U {m3u.name}: {e}")
 
         logger.info(f"✨ Sanitización completada: {renamed_count} archivos renombrados, {m3u_updated_count} listas actualizadas.")
         return {"renamed": renamed_count, "m3u_updated": m3u_updated_count}
             
-        threads = []
-        for _ in range(concurrency):
-            th = threading.Thread(target=self._download_worker, args=(q, results), daemon=True)
-            th.start()
-            threads.append(th)
-            
-        q.join()
-        for _ in threads:
-            q.put(None)
-        for th in threads:
-            th.join()
-            
-        # Reset status to idle when done
-        self.status["state"] = "idle"
-        self.status["current_song"] = None
-        if self.broadcast_func: self.broadcast_func("status", self.status)
-        
-        return results
+

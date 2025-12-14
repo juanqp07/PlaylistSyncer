@@ -2,6 +2,16 @@ Changelog
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.2] - 2025-12-14
+### Fixed
+- **Sync:** Corregido bug crítico que impedía el inicio de las descargas (hilos huérfanos).
+- **Control:** Restaurado el botón de Stop (endpoint `/stop` ausente).
+- **Sanitización:** La herramienta ahora respeta tildes y caracteres latinos (`Ñ`, `á`, etc).
+
+### Changed
+- **M3U:** Eliminado prefijo `./` para mayor compatibilidad con reproductores.
+- **UI:** Botón de "Reparar" ahora es ámbar para mejor visibilidad.
+
 ## [1.4.1] - 2025-12-14
 ### Changed
 - **Renombramiento:** Proyecto renombrado a `PlaylistSyncer`.

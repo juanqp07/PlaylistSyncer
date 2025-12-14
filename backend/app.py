@@ -208,7 +208,7 @@ def get_config():
     manager.reload_config()
     config = manager.config.copy()
     config["is_docker"] = (BASE_DIR.name == "app")
-    config["version"] = "1.4.1" 
+    config["version"] = "1.4.2" 
     return config
 
 @app.get("/status")
@@ -273,6 +273,12 @@ def run_now(background_tasks: BackgroundTasks):
     """Ejecuta todas las playlists configuradas inmediatamente."""
     background_tasks.add_task(execution_job)
     return {"status": "started"}
+
+@app.post("/stop")
+def stop_job():
+    """Detiene la descarga en curso."""
+    manager.stop()
+    return {"status": "stopping"}
 
 @app.post("/api/retry/{id}")
 async def retry_download(id: str):
