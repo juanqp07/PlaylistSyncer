@@ -10,8 +10,6 @@ services:
     volumes:
       - ./downloads:/app/downloads
       - ./config.json:/app/config.json
-      - ./playlists.json:/app/playlists.json
-      - ./frontend:/app/frontend
       # Persistent Data (DB, History)
       - ./data:/app/data
       # Playlist sync cache

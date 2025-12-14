@@ -46,6 +46,7 @@ export class UI {
         }
         // concurrency removed
         document.getElementById('conf-format').value = data.format || "opus";
+        document.getElementById('conf-bitrate').value = data.bitrate || "192k";
         document.getElementById('conf-schedule').value = data.schedule_interval_hours || 0;
 
         if (data.version) {

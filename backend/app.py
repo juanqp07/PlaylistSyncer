@@ -180,6 +180,8 @@ manager = DownloaderManager(config_path=str(CONFIG_PATH), broadcast_func=sync_br
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await connection_manager.connect(websocket)
+    # Send current status immediately
+    await websocket.send_json({"type": "status", "data": manager.status})
     try:
         while True:
             data = await websocket.receive_text()
@@ -191,6 +193,7 @@ class ConfigUpdate(BaseModel):
     output_dir: Optional[str] = None
     # concurrency removed (forced to 1)
     format: Optional[str] = "opus"
+    bitrate: Optional[str] = "192k"
     spotdl_extra_args: List[str] = None
     ytdlp_extra_args: List[str] = None
 

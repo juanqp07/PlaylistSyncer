@@ -2,6 +2,14 @@ Changelog
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2025-12-14
+### Changed
+- **Renombramiento:** Proyecto renombrado a `PlaylistSyncer`.
+- **Idioma:** Localización completa al Español (UI, Logs, README).
+- **Concurrencia:** Eliminada la descarga paralela. Ahora las descargas son secuenciales (1 en 1) para mayor estabilidad.
+- **UI:** Corrección de alineación en botones de playlist y mejoras de estilo.
+- **CI/CD:** Docker tagging automatizado basado en versión del código.
+
 ## [1.3.0] - 2025-12-13
 ### Added
 - **Programación Automática**: Nuevo sistema de ejecución en segundo plano con intervalos configurables (1h, 6h, 12h, 24h).

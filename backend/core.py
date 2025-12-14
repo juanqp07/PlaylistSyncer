@@ -330,6 +330,7 @@ class DownloaderManager:
                 
                 # Obtener formato y bitrate
                 fmt = self.config.get("format", "mp3")
+                bitrate = self.config.get("bitrate", "192k")
                 
                 # Determine m3u filename parameter
                 if m3u_name:
@@ -343,6 +344,7 @@ class DownloaderManager:
                     "--save-file", str(save_file), 
                     "--output", str(self.output_dir),
                     "--format", fmt,
+                    "--bitrate", bitrate,
                     "--m3u", m3u_arg
                 ]
                 cmd.extend(extra_args)

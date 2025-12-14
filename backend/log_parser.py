@@ -38,15 +38,19 @@ class LogParser:
 
         # 1. SpotDL Start / Found
         if "Found" in line and "songs in" in line:
-            try:
-                # Found 50 songs in Éxitos España (Playlist)
-                parts = line.split("Found")[1].split("songs in")
-                count = parts[0].strip()
-                name = parts[1].strip().replace("(Playlist)", "").strip()
-                updates["total_songs"] = int(count)
-                updates["log_message"] = f"{C_CYAN}📊 Playlist detectada: {name} ({count} canciones){C_RESET}"
-            except:
-                pass
+            # Flexible regex for "Found 50 songs in PlaylistName"
+            match = re.search(r"Found (\d+) songs in (.+)", line)
+            if match:
+                try:
+                    count = int(match.group(1))
+                    name = match.group(2).replace("(Playlist)", "").strip()
+                    # ANSI cleanup for name just in case
+                    name = re.sub(r'\x1b\[[0-9;]*m', '', name) 
+                    
+                    updates["total_songs"] = count
+                    updates["log_message"] = f"{C_CYAN}📊 Playlist detectada: {name} ({count} canciones){C_RESET}"
+                except:
+                    pass
 
         # 2. SpotDL Downloading
         elif "Downloading" in line and tool == "spotdl":

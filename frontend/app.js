@@ -29,6 +29,7 @@ async function saveConfig() {
     const outputDir = document.getElementById('conf-output').value;
     // concurrency removed
     const format = document.getElementById('conf-format').value;
+    const bitrate = document.getElementById('conf-bitrate').value;
     const schedule = parseInt(document.getElementById('conf-schedule').value);
 
     try {
@@ -36,7 +37,8 @@ async function saveConfig() {
         await api.saveConfig({
             output_dir: outputDir,
             // concurrency removed
-            format: format
+            format: format,
+            bitrate: bitrate
         });
 
         // Save Schedule Separately (API separation)

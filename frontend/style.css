@@ -731,6 +731,10 @@ h2 {
     width: 100%;
 }
 
+.list-item .actions {
+    width: auto;
+}
+
 #btn-download {
     flex: 1;
     /* Take all available space */

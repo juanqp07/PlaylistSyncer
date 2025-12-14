@@ -26,6 +26,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract version from code
+        id: get_version
+        run: |
+          VERSION=$(grep -oP '__version__ = "\K[^"]+' backend/__init__.py)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -33,7 +39,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
+            type=raw,value=${{ steps.get_version.outputs.VERSION }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
