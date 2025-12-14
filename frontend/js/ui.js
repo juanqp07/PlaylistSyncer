@@ -247,8 +247,13 @@ export class UI {
     appendLog(text) {
         const consoleBox = document.getElementById('console-logs');
 
-        // eslint-disable-next-line no-control-regex
-        const cleanText = text.replace(/\u001b\[\d+m/g, '').trim();
+        // Parse ANSI to HTML
+        const htmlContent = this.parseAnsi(text);
+
+        // For duplicate check, get text content
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        const cleanText = tempDiv.textContent.trim();
 
         const lastLog = consoleBox.lastElementChild;
         if (lastLog) {
@@ -270,23 +275,13 @@ export class UI {
         const div = document.createElement('div');
         div.className = 'log-line';
         div.dataset.rawText = cleanText;
+        div.innerHTML = htmlContent; // Render with colors
 
-        if (text.includes('\u001b[92m')) div.classList.add('log-green');
-        else if (text.includes('\u001b[96m')) div.classList.add('log-cyan');
-        else if (text.includes('\u001b[93m')) div.classList.add('log-yellow');
-        else if (text.includes('\u001b[91m')) div.classList.add('log-red');
-
+        // Special Styling for specific content types (keep legacy support)
         if (cleanText.includes('RATE LIMIT')) {
             div.classList.add('log-warning-box');
-            div.innerHTML = `<span>⚠️ ${cleanText}</span>`;
         } else if (cleanText.includes('Total Songs') || cleanText.includes('TOTAL ENCONTRADO')) {
             div.classList.add('log-info-box');
-            div.textContent = `> ${cleanText}`;
-        } else if (cleanText.includes('Descargando') || cleanText.includes('INICIANDO')) {
-            div.textContent = `> ${cleanText}`;
-        } else {
-            if (!div.className.includes('log-')) div.classList.add('log-dim');
-            div.textContent = `> ${cleanText}`;
         }
 
         consoleBox.appendChild(div);
@@ -296,5 +291,34 @@ export class UI {
         }
 
         consoleBox.scrollTop = consoleBox.scrollHeight;
+    }
+
+    parseAnsi(text) {
+        // Simple ANSI to HTML converter
+        // \033[92m -> <span class="log-green">
+        // \033[96m -> <span class="log-cyan">
+        // \033[93m -> <span class="log-yellow">
+        // \033[91m -> <span class="log-red">
+        // \033[0m -> </span>
+
+        if (!text) return "";
+
+        let html = text
+            .replace(/\u001b\[92m/g, '<span class="log-green">')
+            .replace(/\u001b\[96m/g, '<span class="log-cyan">')
+            .replace(/\u001b\[93m/g, '<span class="log-yellow">')
+            .replace(/\u001b\[91m/g, '<span class="log-red">')
+            .replace(/\u001b\[0m/g, '</span>');
+
+        // Remove any remaining control chars
+        // eslint-disable-next-line no-control-regex
+        html = html.replace(/\u001b\[\d+m/g, '');
+
+        // Initial prefix > arrow styling
+        if (!html.startsWith('<span') && !html.includes('⚠️')) {
+            html = `<span class="log-dim">> </span>` + html;
+        }
+
+        return html;
     }
 }

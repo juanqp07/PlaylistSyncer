@@ -69,7 +69,9 @@ All notable changes to this project will be documented in this file.
 - **Renamed Project**: From "OpusVault" to **Soniq**.
 - **Core Unification**: CLI and Web now share the exact same download logic.
 - **UI Improvements**: Better spacing, responsive layout, and refined status states.
-- **Log Aesthetics**: Deduplicated rate limit warnings and improved log coloring.
+- **Log Separation**: Consola Docker (Raw/Debug) vs Frontend (Pretty/Colors).
+- **UI**: Barra de progreso más visible y animada. Logs con colores reales en la web.
+- **Robustez**: Corrección de directorios en primera ejecución (fresh install).
 
 ### Security
 - Planned: Non-root user execution (Coming in 1.0.1/1.1.0).

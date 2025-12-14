@@ -22,19 +22,7 @@ except ImportError:
 # Configurar logger localmente para este módulo
 logger = logging.getLogger("downloader.core")
 
-class WebSocketLogHandler(logging.Handler):
-    def __init__(self, broadcast_func: Callable):
-        super().__init__()
-        self.broadcast_func = broadcast_func
 
-    def emit(self, record: logging.LogRecord):
-        try:
-            msg = self.format(record)
-            # We broadcast a "log" event
-            if self.broadcast_func:
-                self.broadcast_func("log", msg)
-        except Exception:
-            self.handleError(record)
 
 class DownloaderManager:
     def __init__(self, config_path: str, output_dir: Optional[str] = None, broadcast_func: Optional[Callable] = None):
@@ -44,14 +32,9 @@ class DownloaderManager:
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.parser = LogParser()
         
-        # Setup WS Logger if broadcast function is provided
-        if self.broadcast_func:
-            ws_handler = WebSocketLogHandler(self.broadcast_func)
-            ws_handler.setLevel(logging.INFO)
-            # Create a simple formatter that doesn't duplicate timestamp since frontend handles it
-            formatter = logging.Formatter('%(message)s')
-            ws_handler.setFormatter(formatter)
-            logger.addHandler(ws_handler)
+        self.parser = LogParser()
+        
+        # Setup WS Logger removed - Manual broadcast in _run_cmd
             
         # Global status for UI
         self.status: Dict[str, Any] = {
@@ -104,7 +87,10 @@ class DownloaderManager:
 
     def stop(self):
         """Signals the manager to stop processing and kills active process."""
-        logger.info("🛑 Deteniendo descargas...")
+        msg = "🛑 Deteniendo descargas..."
+        logger.info(msg)
+        if self.broadcast_func: self.broadcast_func("log", msg)
+        
         self.stop_requested.set()
         
         # Kill ALL active processes safely
@@ -254,22 +240,20 @@ class DownloaderManager:
                         "web client" in line
                      )
 
-                     if (has_update or is_error) and not is_noise:
-                         if has_update and "log_message" in updates:
-                             logger.info(updates["log_message"])
-                         else:
-                             logger.info(line)
+                     if not is_noise:
+                         # 2. CONSOLE LOGGING (Raw/Normal)
+                         # User requested "logs normales" in console
+                         logger.info(line)
                     
-                     # 3. FRONTEND BROADCAST
+                     # 3. FRONTEND BROADCAST (Pretty/Modified)
                      if updates:
                          if "downloaded_increment" in updates:
                              self.status["downloaded"] += updates.pop("downloaded_increment")
                              
                          if "log_message" in updates:
                              if self.broadcast_func:
-                                 import re
-                                 clean_msg = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', updates["log_message"])
-                                 self.broadcast_func("log", clean_msg)
+                                 # Send raw message with ANSI codes so frontend can parse colors
+                                 self.broadcast_func("log", updates["log_message"])
                          
                          for k, v in updates.items():
                              if k not in ["log_message", "log_level", "log_raw"]:
@@ -327,7 +311,7 @@ class DownloaderManager:
                 # Construir comando (SpotDL)
                 import hashlib
                 sync_dir = self.output_dir / ".sync"
-                sync_dir.mkdir(exist_ok=True)
+                sync_dir.mkdir(parents=True, exist_ok=True)
                 
                 url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
                 save_file = sync_dir / f"{url_hash}.spotdl"
@@ -344,9 +328,9 @@ class DownloaderManager:
                     m3u_arg = f"{self.output_dir}/{{list[0]}}.m3u8"
 
                 cmd = [
-                    "spotdl", "sync", url, 
+                    "spotdl", "download", url, 
                     "--save-file", str(save_file), 
-                    "--output", f"{self.output_dir}/{{artist}} - {{title}}.{{ext}}",
+                    "--output", f"{self.output_dir}/{{artist}} - {{title}}",
                     "--format", fmt,
                     "--bitrate", bitrate,
                     "--m3u", m3u_arg
@@ -398,7 +382,9 @@ class DownloaderManager:
                     break
                     
                 attempts += 1
-                logger.info(f"✨ Procesando: {url} | 🔧 {tool} (Intento {attempts})")
+                msg = f"✨ Procesando: {url} | 🔧 {tool} (Intento {attempts})"
+                logger.info(msg)
+                if self.broadcast_func: self.broadcast_func("log", msg)
                 
                 success, logs = self._run_cmd(cmd)
                 
@@ -460,8 +446,16 @@ class DownloaderManager:
             urls: Lista de URLs a descargar
             m3u_name: Nombre opcional para el archivo m3u8 (solo spotdl)
         """
-        # Forced Sequential Execution (User Request)
         concurrency = 1
+        
+        # Ensure directory exists before starting
+        if not self.output_dir.exists():
+             try:
+                 self.output_dir.mkdir(parents=True, exist_ok=True)
+                 logger.info(f"📁 Directorio creado: {self.output_dir}")
+             except Exception as e:
+                 logger.error(f"❌ Error creando directorio {self.output_dir}: {e}")
+                 return []
             
         q = queue.Queue()
         results = []
@@ -522,7 +516,10 @@ class DownloaderManager:
         # Regex to find brackets at the end of stem: "Song Title [ID].ext"
         bracket_pattern = re.compile(r'\s*\[[^\]]+\]')
         
-        logger.info("🔪 Iniciando sanitización de archivos...")
+        msg = "🔪 Iniciando sanitización de archivos..."
+        logger.info(msg)
+        if self.broadcast_func: self.broadcast_func("log", msg)
+        
         for file in self.output_dir.glob("*"):
             if file.is_dir() or file.suffix == '.m3u8' or file.name.startswith('.'):
                 continue
@@ -596,7 +593,10 @@ class DownloaderManager:
                 except Exception as e:
                     logger.error(f"❌ Error updating M3U {m3u.name}: {e}")
 
-        logger.info(f"✨ Sanitización completada: {renamed_count} archivos renombrados, {m3u_updated_count} listas actualizadas.")
+        msg = f"✨ Sanitización completada: {renamed_count} archivos renombrados, {m3u_updated_count} listas actualizadas."
+        logger.info(msg)
+        if self.broadcast_func: self.broadcast_func("log", msg)
+        
         return {"renamed": renamed_count, "m3u_updated": m3u_updated_count}
             
 
