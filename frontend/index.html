@@ -4,138 +4,177 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpusVault</title>
-    <link rel="stylesheet" href="style.css">
+    <title>PlaylistSyncer</title>
+    <link rel="stylesheet" href="style.css?v=1.3.3">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
     <div class="container">
-        <header>
-            <h1>OpusVault</h1>
-            <div id="status-indicator" class="status-badge">Offline</div>
+        <!-- Navbar -->
+        <header class="navbar">
+            <h1 style="display:flex; align-items:center; gap:10px; margin:0; font-size:1.5rem;">
+                PlaylistSyncer
+                <span id="app-version" class="version-badge">v1.4.1</span>
+            </h1>
+            <div class="nav-links">
+                <button class="tab-btn active" id="tab-btn-dashboard" data-tab="dashboard">Dashboard</button>
+                <button class="tab-btn" id="tab-btn-playlists" data-tab="playlists">Playlists</button>
+                <button class="tab-btn" id="tab-btn-history" data-tab="history">Historial</button>
+                <button class="tab-btn" id="tab-btn-config" data-tab="config">Ajustes</button>
+            </div>
+            <div id="status-indicator" class="status-badge" style="margin:0;">Offline</div>
         </header>
 
         <main>
-            <!-- Dashboard Section -->
-            <section id="dashboard" class="card">
-                <h2>Dashboard</h2>
-                <div class="actions">
-                    <button id="btn-download" class="button primary">
-                        <span>⬇</span> Descargar
-                    </button>
-                    <!-- <button id="btn-save" class="button secondary">Guardar Config</button> -->
-                </div>
-
-                <div id="status-container" style="display: none;">
-                    <!-- Status Header -->
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <h3
-                            style="margin: 0; font-size: 1rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">
-                            Estado</h3>
-                        <span id="status-state" class="status-badge"
-                            style="background: rgba(139, 92, 246, 0.2); color: #d8b4fe; border: 1px solid rgba(139, 92, 246, 0.3);">Inactivo</span>
+            <!-- TAB: DASHBOARD -->
+            <div id="tab-dashboard" class="tab-content">
+                <div class="card">
+                    <h2>Estado</h2>
+                    <div class="actions">
+                        <button class="btn btn-primary" id="btn-download">Sincronizar Todo</button>
+                        <button class="btn btn-danger" id="btn-stop" style="display:none" disabled>🛑 Stop</button>
+                        <button class="btn btn-secondary" id="btn-clear-console" style="display:none">Limpiar
+                            Consola</button>
                     </div>
 
-                    <!-- Progress Bar -->
-                    <div class="progress-wrapper">
-                        <div class="progress-bg">
-                            <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
-                        </div>
+                    <div id="status-container" style="display:none; margin-top:1.5rem;">
                         <div
-                            style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.85rem; color: var(--text-muted);">
-                            <span id="progress-percent">0%</span>
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <span id="status-state" class="status-badge">Esperando...</span>
+                            <span id="status-playlist-label"
+                                style="display:none; color:var(--primary); font-weight:bold;"></span>
+                        </div>
+
+                        <div style="margin-bottom:0.5rem">
+                            <span id="status-song" class="text-truncate" style="font-weight:600;">Iniciando...</span>
+                        </div>
+
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+
+                        <div class="stats-row"
+                            style="margin-top:0.5rem; display:flex; justify-content:space-between; color:var(--text-muted); font-size:0.9rem;">
                             <span><span id="status-downloaded">0</span> / <span id="status-total-count">0</span></span>
+                            <span id="progress-percent">0%</span>
                         </div>
                     </div>
 
-                    <!-- Current Song -->
-                    <div class="media-info">
-                        <div class="media-icon">🎵</div>
-                        <div class="media-details">
-                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">EN PROCESO
-                            </div>
-                            <div id="status-song" class="text-truncate" style="font-size: 1rem; font-weight: 600;">-
-                            </div>
+                    <div class="console-box" id="console-logs" style="margin-top:1rem;"></div>
+                </div>
+            </div>
+
+            <!-- TAB: PLAYLISTS -->
+            <div id="tab-playlists" class="tab-content" style="display:none">
+                <div class="card">
+                    <h2>Mis Playlists</h2>
+                    <div class="add-playlist-form">
+                        <input type="text" id="pl-name" placeholder="Nombre (ej. Favoritos)" class="input">
+                        <input type="text" id="pl-url" placeholder="URL (Spotify/Youtube)" class="input">
+                        <button class="btn btn-primary" id="btn-add-pl">Añadir</button>
+                    </div>
+                    <div class="playlist-list" id="playlist-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: HISTORY -->
+            <div id="tab-history" class="tab-content" style="display:none">
+                <div class="card">
+                    <h2>Historial de Sincronización</h2>
+                    <div id="history-list" class="history-list">
+                        <div class="empty-state">Cargando...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: CONFIG -->
+            <div id="tab-config" class="tab-content" style="display:none">
+                <div class="card">
+                    <h2>Configuración</h2>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:2">
+                            <label>Directorio de Salida</label>
+                            <input type="text" id="conf-output" class="input">
                         </div>
                     </div>
-
-                    <!-- Hacker Console -->
-                    <div class="console-box">
-                        <div class="console-header">
-                            <span>>_ TERMINAL</span>
-                            <button id="btn-clear-console" title="Limpiar">✕</button>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Concurrencia (Hilos)</label>
+                            <input type="number" id="conf-concurrency" class="input" min="1" max="10">
                         </div>
-                        <div id="console-logs" class="console-content">
-                            <!-- Logs will be injected here -->
+                        <div class="form-group">
+                            <label>Formato Audio</label>
+                            <select id="conf-format" class="input">
+                                <option value="opus">Opus (Mejor Calidad/Peso)</option>
+                                <option value="mp3">MP3 (Compatible)</option>
+                                <option value="m4a">M4A (AAC)</option>
+                                <option value="flac">FLAC (Sin Pérdida)</option>
+                            </select>
                         </div>
                     </div>
-                </div>
-                <!-- Removed old #run-status -->
-            </section>
-
-            <!-- Playlists Section -->
-            <section id="playlists" class="card">
-                <h2>Playlists</h2>
-                <div class="add-playlist-form">
-                    <input type="text" id="pl-name" placeholder="Nombre (ej. Gimnasio)" class="input">
-                    <input type="text" id="pl-url" placeholder="URL de Spotify o YouTube" class="input">
-                    <button id="btn-add-pl" class="btn btn-success" style="width: auto;">+</button>
-                </div>
-                <div id="playlist-list" class="list-group">
-                    <!-- Playlists rendered here -->
-                </div>
-            </section>
-
-            <!-- Config Section -->
-            <section id="config" class="card">
-                <h2>Configuración</h2>
-
-                <div class="form-row">
-                    <div class="form-group" style="grid-column: span 2;">
-                        <label>Directorio de Salida</label>
-                        <input type="text" id="conf-output" class="input" placeholder="/downloads">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Programación Automática</label>
+                            <select id="conf-schedule" class="input">
+                                <option value="0">Desactivado (Manual)</option>
+                                <option value="1">Cada 1 hora</option>
+                                <option value="6">Cada 6 horas</option>
+                                <option value="12">Cada 12 horas</option>
+                                <option value="24">Diariamente (24h)</option>
+                            </select>
+                        </div>
                     </div>
+                    <button class="btn btn-primary" id="btn-save-config">Guardar Cambios</button>
+                    <span id="config-status"></span>
                 </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Formato de Audio</label>
-                        <select id="conf-format" class="input">
-                            <option value="opus">Opus (Mejor Calidad/Peso)</option>
-                            <option value="mp3">MP3 (Compatible)</option>
-                            <option value="m4a">M4A (AAC)</option>
-                            <option value="flac">FLAC (Sin Pérdida)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Concurrencia</label>
-                        <input type="number" id="conf-concurrency" class="input" min="1" max="5" value="2">
-                    </div>
-                </div>
-
-                <div class="actions">
-                    <button id="btn-save-config" class="button secondary">Guardar Configuración</button>
-                </div>
-                <p id="config-status" class="status-text"></p>
-            </section>
+            </div>
         </main>
     </div>
 
-    <!-- Tracks Modal -->
-    <div id="tracks-modal" class="modal" style="display:none;">
+    <!-- Modal for Tracks -->
+    <div id="tracks-modal" class="modal">
         <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-                <h3 style="margin:0">Canciones Descargadas</h3>
-                <button onclick="document.getElementById('tracks-modal').style.display='none'" class="btn btn-secondary"
-                    style="padding: 5px 10px;">✕</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                <h3 id="modal-title" style="margin:0">Tracks</h3>
+                <span class="close" style="cursor:pointer; font-size:1.5rem;">&times;</span>
             </div>
-            <ul id="tracks-list" class="track-list" style="padding-left: 20px;"></ul>
+            <ul id="tracks-list" class="track-list"></ul>
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Edit Playlist Modal -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                <h3 style="margin:0">Editar Playlist</h3>
+                <span class="close-edit" style="cursor:pointer; font-size:1.5rem;">&times;</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Nombre</label>
+                <input type="text" id="edit-name" class="input" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>URLs (Una por línea)</label>
+                <textarea id="edit-urls" class="input"
+                    style="width: 100%; height: 100px; font-family: monospace;"></textarea>
+            </div>
+            <div class="actions" style="justify-content: flex-end;">
+                <button class="btn btn-primary" id="btn-save-edit">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- Main Soniq Logic (Modules) -->
+    <script type="module" src="js/api.js?v=1.4.2"></script>
+    <script type="module" src="js/ui.js?v=1.4.2"></script>
+    <script type="module" src="js/ws.js?v=1.4.2"></script>
+    <script type="module" src="app.js?v=1.4.2"></script>
 </body>
 
 </html>

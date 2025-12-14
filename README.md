@@ -1,67 +1,77 @@
-# OpusVault 🎵
+> [!WARNING]
+> Este proyecto ha sido generado enteramente usando Inteligencia Artificial. Úsalo bajo tu propia responsabilidad. La lógica de descarga y sincronización (vía `spotdl` y `yt-dlp`) depende de servicios de terceros que pueden cambiar o bloquear el acceso en cualquier momento. El autor y la IA no asumen ninguna responsabilidad por su mal uso.
 
-A self-hosted, Dockerized music downloader and manager. Automatically syncs playlists from Spotify and YouTube, downloading them in high-quality Opus (or configurable) format using `spotdl` and `yt-dlp`. Features a modern web interface for management.
+# PlaylistSyncer 🎵
 
-![OpusVault UI](https://via.placeholder.com/800x400?text=OpusVault+Dashboard)
+Un gestor y descargador de música auto-hospedado y dockerizado. Sincroniza automáticamente playlists de Spotify y YouTube, descargándolas en formato Opus de alta calidad (o configurable) usando `spotdl` y `yt-dlp`. Cuenta con una interfaz web moderna y responsiva.
 
-## Features
+## Características
 
-- 🐳 **Dockerized**: Easy to deploy with a single command.
-- 🎹 **Spotify & YouTube Support**: Downloads playlists and tracks seamlessly.
-- 🎛️ **Web Interface**: Manage playlists, view downloads, and configure settings from your browser.
-- 🔒 **Secure**: handling of API credentials via environment variables.
-- ⚡ **Efficient**: Uses `spotdl` sync logic to download only new tracks.
-- 📂 **Organized**: Downloads are saved to a volume-mapped directory.
+- 🐳 **Todo en Uno**: Backend y Frontend en un único contenedor Docker.
+- 🎹 **Spotify y YouTube**: Sincroniza playlists completas sin problemas.
+- 🎛️ **Interfaz Moderna**: Progreso en tiempo real, logs detallados y panel de gestión.
+- ⚡ **Sync Inteligente**: Usa `spotdl` para descargar solo las canciones nuevas.
+- 🛑 **Control Total**: Detén las descargas al instante con un sistema robusto de parada.
+- 🔒 **Auto-Hospedado**: Tus datos, tus reglas.
 
-## Prerequisites
+## Instalación
 
-- [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
+### Método 1: Docker Compose (Recomendado)
 
-## Installation
+1.  Crea un archivo `docker-compose.yml`:
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/yourusername/opusvault.git
-    cd opusvault
+    ```yaml
+    services:
+      playlistsyncer:
+        image: ghcr.io/juanqp07/playlistsyncer:latest
+        container_name: playlistsyncer
+        ports:
+          - "8030:8000"
+        volumes:
+          - ./downloads:/app/downloads
+          - ./data:/app/data
+        restart: unless-stopped
     ```
 
-2.  **Configuración (Opcional)**:
-    Puedes ajustar `config.json` para cambiar el formato de audio, bitrate, etc. Por defecto ya viene configurado para un buen equilibrio calidad/peso.
+2.  Arranca el contenedor:
+    ```bash
+    docker-compose up -d
+    ```
 
-3.  **Start the Application**:
+3.  Accede a la UI en `http://localhost:8030`.
+
+### Método 2: Construir desde el código
+
+1.  Clona el repositorio:
+    ```bash
+    git clone https://github.com/tuusuario/playlistsyncer.git
+    cd playlistsyncer
+    ```
+
+2.  Construye y arranca:
     ```bash
     docker-compose up -d --build
     ```
 
-4.  **Access the UI**:
-    Open your browser and navigate to:
-    [http://localhost:80](http://localhost:80)
+## Uso
 
-## Usage
+1.  **Añadir Playlist**: Pega la URL de una playlist de Spotify o YouTube.
+2.  **Sincronizar**: Haz clic en **"Sincronizar Todo"** (o en los botones individuales) para empezar.
+3.  **Logs**: Observa la consola integrada con estados detallados y emojis (ej. `✨ Procesando: [Canción]`).
+4.  **Stop**: Usa el botón de Stop para detener inmediatamente todas las descargas.
 
-1.  **Add Playlist**: Paste a Spotify or YouTube playlist URL in the "Añadir Playlist" field.
-2.  **Download**: Click "Ejecutar Ahora" to start the sync process.
-3.  **Monitor**: Watch the status update in real-time.
-4.  **View Tracks**: Click "Ver Tracks" on any playlist to see what has been downloaded.
+## Configuración
 
-## Configuration
+Navega a la pestaña **Ajustes** en la UI para cambiar:
+- **Formato de Audio**: `opus` (por defecto), `mp3`, `flac`, etc.
+- **Bitrate**: `192k` es el punto dulce entre calidad y peso.
+- **Concurrencia**: Cuántas descargas ejecutar en paralelo.
 
-You can adjust settings via the Web UI:
-- **Audio Format**: `opus`, `mp3`, `flac`, etc.
-- **Bitrate**: Target bitrate (e.g., `128k`, `320k`).
-- **Concurrency**: Number of simultaneous downloads.
+## Solución de Problemas
 
-*Note: The download directory is locked to `/app/downloads` inside the container.*
+- **Permisos**: Si las descargas fallan con errores de permisos, asegúrate de que la carpeta del host permite escritura, o ejecuta el contenedor como root (la config de compose proporcionada suele manejar esto).
+- **Logs**: Revisa `docker logs -f playlistsyncer` si la UI deja de responder.
 
-## Troubleshooting
+## Licencia
 
-- **Check Logs**:
-    ```bash
-    docker logs -f opusvault
-    ```
-- **Permissions**: Ensure the `downloads` folder on your host is writable.
-
-## License
-
-MIT
+MIT - Úsalo libremente, ¡pero recuerda la advertencia sobre la IA!

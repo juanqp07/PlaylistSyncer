@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Body, BackgroundTasks, WebSocket, We
 import uvicorn
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, HttpUrl
 from typing import List, Optional, Dict, Any
 import logging
 import threading
@@ -13,6 +13,13 @@ try:
     from backend.core import DownloaderManager
 except ImportError:
     from core import DownloaderManager
+
+# Database Module import
+try:
+    import backend.database as db
+except ImportError:
+    import database as db
+
 import json
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -34,9 +41,6 @@ class ConnectionManager:
             try:
                 await connection.send_json(message)
             except Exception:
-                # If sending fails, we might want to remove the connection, 
-                # but typically disconnect handles it. 
-                # For robustness, we could clean up here too.
                 pass
                 
 connection_manager = ConnectionManager()
@@ -44,44 +48,39 @@ connection_manager = ConnectionManager()
 app = FastAPI()
 
 # Rutas
+# Rutas
 current_dir = Path(__file__).resolve().parent
-if current_dir.name == "app":
-    # Docker (usually /app)
-    BASE_DIR = current_dir
-elif (current_dir / "config.json").exists():
-    # Flat structure (e.g. manual run)
+# Simple Docker Detection via Env/File
+if os.getenv("IS_DOCKER") or (current_dir.name == "app"):
     BASE_DIR = current_dir
 else:
-    # Local (nested structure: script/backend -> script/)
-# Local (nested structure: script/backend -> script/)
-    BASE_DIR = current_dir.parent
+    # Check if we are in backend/ subdir (Local dev)
+    if current_dir.name == "backend":
+         BASE_DIR = current_dir.parent
+    else:
+         BASE_DIR = current_dir
 
-# DEBUG LOGGING
+# Logger config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
-logger.info(f"STARTUP DEBUG: current_dir={current_dir}")
-logger.info(f"STARTUP DEBUG: current_dir.name={current_dir.name}")
-logger.info(f"STARTUP DEBUG: BASE_DIR={BASE_DIR}")
-logger.info(f"STARTUP DEBUG: Has SPOTIFY_CLIENT_ID? {bool(os.getenv('SPOTIFY_CLIENT_ID'))}")
-logger.info(f"STARTUP DEBUG: Env Keys: {list(os.environ.keys())}")
 
 CONFIG_PATH = BASE_DIR / "config.json"
 PLAYLISTS_PATH = BASE_DIR / "playlists.json"
 FRONTEND_DIR = BASE_DIR / "frontend"
 
-# Configurar logs
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("backend")
-
 # Servir frontend estático
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+# Mount /js for modular scripts
+js_dir = FRONTEND_DIR / "js"
+app.mount("/js", StaticFiles(directory=js_dir), name="js")
+
 
 # Custom Filter to silence /status logs
 class EndpointFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return record.getMessage().find("GET /status") == -1
 
-# Filter uvicorn access logs
 logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 
 @app.get("/")
@@ -96,65 +95,94 @@ async def read_css():
 async def read_js():
     return FileResponse(FRONTEND_DIR / "app.js")
 
-if not PLAYLISTS_PATH.exists():
-    PLAYLISTS_PATH.write_text("[]", encoding="utf-8")
-
 # Helper to bridge Sync (Core) -> Async (WebSockets)
 def broadcast_to_ws(event_type: str, data: Any):
-    """
-    Called from Sync code (DownloaderManager).
-    Schedules the broadcast coroutine on the running event loop if possible,
-    or creates a new loop if needed (though uvicorn provides one).
-    
-    Since core is running in threads, we need `asyncio.run_coroutine_threadsafe`
-    or similar if we want to wait, but fire-and-forget is okay.
-    Actually, accessing the main loop from a thread is tricky.
-    
-    The robust way: Use connection_manager.broadcast inside an async wrapper,
-    and call it from the thread using the loop.
-    """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # We are likely in an async context or the loop is accessible.
-            # But core runs in threads.
-            # We need the loop that uvicorn is running.
-            # A global reference to the loop would be good, OR:
-            # We just fire and forget if we can get a handle on it.
-            pass
-    except:
-        pass
-
-    # Simplified approach for FastApi + Threading:
-    # Use run_until_complete is bad if loop is running.
-    # We will need to store the main loop on startup.
-    # For now, let's define the function and update it later or use a global loop variable.
     pass
 
-# We need a reference to the main loop to schedule tasks from threads
 main_loop = None
 
 @app.on_event("startup")
 async def startup_event():
     global main_loop
     main_loop = asyncio.get_running_loop()
+    
+    # Initialize DB
+    db.init_db()
+    
+    # Restore Schedule from Config
+    manager.reload_config()
+    interval = manager.config.get("schedule_interval_hours", 0)
+    if interval > 0:
+        logger.info(f"Restoring schedule: Every {interval} hours")
+        scheduler.add_job(execution_job, 'interval', hours=interval, id="auto_download")
+    
+    # Run Migration
+    run_migration_if_needed()
 
+def run_migration_if_needed():
+    """Migrates JSON playlists to SQLite if they exist."""
+    if not PLAYLISTS_PATH.exists():
+        return
+        
+    try:
+        content = PLAYLISTS_PATH.read_text(encoding="utf-8")
+        if not content.strip():
+            return
+            
+        old_data = json.loads(content)
+        if not isinstance(old_data, list) or not old_data:
+            return
+
+        count = 0
+        for pl in old_data:
+            if not db.get_playlist(pl["id"]):
+                db.save_playlist(pl["id"], pl["name"], pl["urls"], pl.get("track_count", 0))
+                count += 1
+        
+        if count > 0:
+            logger.info(f"Migrated {count} playlists from JSON to SQLite.")
+            PLAYLISTS_PATH.write_text("[]", encoding="utf-8")
+            
+    except Exception as e:
+        logger.error(f"Migration failed: {e}")
+
+@app.post("/schedule")
+def set_schedule(interval_hours: int = Body(..., embed=True)):
+    """Configura la ejecución automática cada X horas y persiste la configuración."""
+    job_id = "auto_download"
+    
+    # 1. Save to Config
+    try:
+        current = json.loads(CONFIG_PATH.read_text())
+    except:
+        current = {}
+    
+    current["schedule_interval_hours"] = interval_hours
+    CONFIG_PATH.write_text(json.dumps(current, indent=2), encoding="utf-8")
+    manager.reload_config()
+
+    # 2. Update Scheduler
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+    
+    if interval_hours > 0:
+        scheduler.add_job(execution_job, 'interval', hours=interval_hours, id=job_id)
+        return {"status": "scheduled", "interval_hours": interval_hours}
+    else:
+        return {"status": "disabled"}
 def sync_broadcast(event_type, data):
     msg = {"type": event_type, "data": data}
     if main_loop and connection_manager.active_connections:
         asyncio.run_coroutine_threadsafe(connection_manager.broadcast(msg), main_loop)
 
-manager = DownloaderManager(config_path=CONFIG_PATH, broadcast_func=sync_broadcast)
+manager = DownloaderManager(config_path=str(CONFIG_PATH), broadcast_func=sync_broadcast)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await connection_manager.connect(websocket)
     try:
         while True:
-            # Keep alive / maybe receive commands later?
             data = await websocket.receive_text()
-            # Echo or handle?
-            # For now, mostly one-way (Server -> Client)
     except WebSocketDisconnect:
         connection_manager.disconnect(websocket)
 
@@ -169,7 +197,7 @@ class ConfigUpdate(BaseModel):
 class Playlist(BaseModel):
     id: str
     name: str
-    urls: List[str]
+    urls: List[HttpUrl]
 
 # Routes
 @app.get("/config")
@@ -177,6 +205,7 @@ def get_config():
     manager.reload_config()
     config = manager.config.copy()
     config["is_docker"] = (BASE_DIR.name == "app")
+    config["version"] = "1.4.1" 
     return config
 
 @app.get("/status")
@@ -185,53 +214,49 @@ def get_status():
 
 @app.post("/config")
 def update_config(cfg: Dict[str, Any]):
-    # Leer config actual
     try:
         current = json.loads(CONFIG_PATH.read_text())
     except:
         current = {}
-    
-    # Filter out masked secrets to avoid corrupting config.json
-    # Removed as we no longer handle credentials
         
     current.update(cfg)
     CONFIG_PATH.write_text(json.dumps(current, indent=2), encoding="utf-8")
     manager.reload_config()
-    manager.verify_dependencies() # Regenerate SpotDL config
+    manager.verify_dependencies() 
     return manager.config
 
 @app.get("/playlists")
 def get_playlists():
-    try:
-        return json.loads(PLAYLISTS_PATH.read_text())
-    except:
-        return []
+    return db.get_playlists()
 
 @app.post("/playlists")
 def save_playlist(playlist: Playlist):
     try:
-        data = json.loads(PLAYLISTS_PATH.read_text())
-    except:
-        data = []
-    
-    # Upsert logic
-    new_data = [p for p in data if p["id"] != playlist.id]
-    new_data.append(playlist.model_dump())
-    
-    PLAYLISTS_PATH.write_text(json.dumps(new_data, indent=2), encoding="utf-8")
-    return {"status": "saved"}
+        # Convert HttpUrl objects to strings for storage
+        urls_str = [str(u) for u in playlist.urls]
+        db.save_playlist(playlist.id, playlist.name, urls_str)
+        return {"status": "saved"}
+    except Exception as e:
+        logger.error(f"DB Error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
 
 @app.delete("/playlists/{id}")
 def delete_playlist(id: str):
-    try:
-        data = json.loads(PLAYLISTS_PATH.read_text())
-    except:
-        return {"status": "error"}
-    
-    new_data = [p for p in data if p["id"] != id]
-    PLAYLISTS_PATH.write_text(json.dumps(new_data, indent=2), encoding="utf-8")
+    db.delete_playlist(id)
     return {"status": "deleted"}
 
+@app.post("/playlists/{id}/sync")
+def sync_playlist_now(id: str, background_tasks: BackgroundTasks):
+    pl = db.get_playlist(id)
+    if not pl:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    
+    background_tasks.add_task(execution_job_single, pl)
+    return {"status": "started", "playlist": pl["name"]}
+
+@app.get("/history")
+def get_history():
+    return db.get_history()
 
 scheduler = BackgroundScheduler()
 scheduler.start()
@@ -243,9 +268,14 @@ def shutdown_event():
 @app.post("/run")
 def run_now(background_tasks: BackgroundTasks):
     """Ejecuta todas las playlists configuradas inmediatamente."""
-    # Encolar en background para no bloquear
     background_tasks.add_task(execution_job)
     return {"status": "started"}
+
+@app.post("/stop")
+def stop_job():
+    """Detiene la descarga en curso."""
+    manager.stop()
+    return {"status": "stopping"}
 
 @app.post("/schedule")
 def set_schedule(interval_hours: int = Body(..., embed=True)):
@@ -260,14 +290,52 @@ def set_schedule(interval_hours: int = Body(..., embed=True)):
     else:
         return {"status": "disabled"}
 
+def execution_job_single(p: Dict):
+    """Ejecuta una sola playlist (Background Task)"""
+    import time
+    start_time = time.time()
+    
+    logger.info(f"Manual Sync: {p['name']}")
+    
+    # Check urls
+    urls = p.get("urls", [])
+    if not urls:
+        return
+
+    manager.update_status("playlist_name", p['name'])
+    
+    # Process
+    results = manager.process_urls(urls, m3u_name=p["name"])
+    
+    # Calculate stats
+    duration = time.time() - start_time
+    downloaded = sum(1 for r in results if r.get("status") == "success") # This is rough, as Core tracks downloaded count globally for the session
+    # Better to ask manager status but status resets.
+    # Results is List of dicts. If manager modifies it we can check?
+    # Manager returns list of results: {url, status, attempts}
+    
+    db.add_history_entry(
+        playlist_name=p["name"],
+        status="completed",
+        downloaded=downloaded,
+        total=len(urls),
+        duration=duration
+    )
+    
+    # Update Track Count
+    update_track_count_for_playlist(p)
+
 def execution_job():
     logger.info("Starting scheduled execution...")
     try:
-        if not PLAYLISTS_PATH.exists():
+        # Use DB
+        playlists = db.get_playlists()
+        if not playlists:
             return
 
-        playlists = json.loads(PLAYLISTS_PATH.read_text())
         total_processed = 0
+        import time
+        start_time = time.time()
         
         for p in playlists:
             urls = p.get("urls", [])
@@ -275,39 +343,74 @@ def execution_job():
                 continue
                 
             logger.info(f"Processing playlist: {p['name']}")
-            # Process each playlist individually to support Named M3U8s
+            
+            manager.update_status("playlist_name", p['name'])
+            
+            # Process
             manager.process_urls(urls, m3u_name=p["name"])
             total_processed += len(urls)
+            
+            # CRITICAL: Check if stop was requested during processing
+            if manager.stop_requested.is_set():
+                logger.info("Stop requested. Aborting remaining playlists.")
+                break
+            
+        # Update Track Counts
+        playlists = db.get_playlists()
+        for p in playlists:
+           update_track_count_for_playlist(p)
+
+        duration = time.time() - start_time
+        
+        # Log Global History? Or per playlist? 
+        # User requested per execution job history? 
+        # "Historial de Ejecuciones": "Hace 2 horas - 5 canciones nuevas".
+        # Let's log a summary entry "Global Sync"
+        
+        db.add_history_entry(
+            playlist_name="Global Sync",
+            status="completed",
+            downloaded=manager.status.get("downloaded", 0), # Rough estimate from last status
+            total=total_processed,
+            duration=duration
+        )
         
         logger.info(f"Execution finished. Processed {total_processed} URLs.")
 
     except Exception as e:
         logger.error(f"Execution error: {e}")
 
-@app.get("/playlists/{id}/tracks")
-def get_playlist_tracks(id: str):
-    try:
-        data = json.loads(PLAYLISTS_PATH.read_text())
-    except:
-        return []
-
-    target_pl = next((p for p in data if p["id"] == id), None)
-    if not target_pl:
-        raise HTTPException(status_code=404, detail="Playlist not found")
-
-    # Name sanitization must match core.py logic
-    m3u_name = target_pl["name"]
-    safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
-    
-    # Check current output dir
+def update_track_count_for_playlist(p):
     manager.reload_config()
     output_dir = Path(manager.config.get("output_dir", "./downloads"))
     
-    # In Docker, paths might be sensitive to absolute/relative changes, rely on manager.output_dir
-    # However, if manager.output_dir is relative, we need to resolve it relative to wherever we are?
-    # Actually manager.output_dir logic in core.py handles it. Here we need to find the file.
-    # It is safest to assume absolute path usage or duplicate determination logic.
-    # For now, let's use the same logic as core:
+    m3u_name = p["name"]
+    safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
+    m3u_path = output_dir / f"{safe_name}.m3u8"
+    
+    count = 0
+    if m3u_path.exists():
+        try:
+            lines = m3u_path.read_text(encoding="utf-8").splitlines()
+            count = sum(1 for line in lines if line.strip() and not line.startswith("#"))
+        except:
+            pass
+    
+    if p.get("track_count") != count:
+        db.update_track_count(p["id"], count)
+        logger.info(f"Updated track count for {p['name']}: {count}")
+
+@app.get("/playlists/{id}/tracks")
+def get_playlist_tracks(id: str):
+    target_pl = db.get_playlist(id)
+    if not target_pl:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    m3u_name = target_pl["name"]
+    safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
+    
+    manager.reload_config()
+    output_dir = Path(manager.config.get("output_dir", "./downloads"))
     
     m3u_path = output_dir / f"{safe_name}.m3u8"
     
@@ -324,7 +427,7 @@ def get_playlist_tracks(id: str):
     except Exception as e:
         logger.error(f"Error reading m3u8: {e}")
         
-    return tracks
+    return tracks 
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

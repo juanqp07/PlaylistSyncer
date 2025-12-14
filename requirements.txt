@@ -1,4 +1,0 @@
-spotdl
-yt-dlp
-tqdm
-mutagen

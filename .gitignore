@@ -1,28 +1,35 @@
-# Secrets
-.env
-.env.*
-!env.example
-
-# User Data
-downloads/
-playlists.json
-/frontend/dist/
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
 .venv/
+env/
 *.egg-info/
 
-# Logs
-*.log
-backend.log
-download.log
-
-# Docker
+# Docker & Deployment
 .docker/
+*.log
+docker-compose.override.yml
+
+# Application Data (Local)
+downloads/
+data/
+config.json
+# Keep config.json if it serves as a template, but usually we ignore personal configs.
+# However, the repo provided a config.json. Let's keep it tracked if it's the "default".
+# If user wants to track default, Keep it. If users override it locally, they should use a copy.
+# Given it's a template for now, let's NOT ignore config.json, but user can change this policy.
+# playlists.json is deleted so no need to ignore.
+
+# Secrets
+.env
+.env.local
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.parcel-cache/
 
 # OS
 .DS_Store

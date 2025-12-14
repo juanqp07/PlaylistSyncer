@@ -1,10 +1,10 @@
 services:
-  opusvault:
+  playlistsyncer:
     build:
-      context: ./backend
-    container_name: opusvault
+      context: .
+    container_name: playlistsyncer
     ports:
-      - "80:8000"
+      - "8030:8000"
     dns:
       - "8.8.8.8"
     volumes:
@@ -12,8 +12,11 @@ services:
       - ./config.json:/app/config.json
       - ./playlists.json:/app/playlists.json
       - ./frontend:/app/frontend
+      # Persistent Data (DB, History)
+      - ./data:/app/data
       # Playlist sync cache
       - ./downloads/.sync:/app/downloads/.sync
     restart: unless-stopped
+    user: "0:0" # Run as root to avoid Permission Errors on downloads
     environment:
       - TZ=Europe/Madrid

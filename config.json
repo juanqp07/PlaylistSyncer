@@ -1,15 +1,10 @@
 {
-  "default_tool": "spotdl",
   "output_dir": "./downloads",
   "format": "opus",
+  "bitrate": "192k",
   "concurrency": 1,
   "ffmpeg_path": "ffmpeg",
   "spotdl_extra_args": [],
-  "ytdlp_extra_args": [
-    "-x",
-    "--audio-format",
-    "best"
-  ],
   "postprocess": {
     "convert_with_ffmpeg": true,
     "normalize_audio": false
@@ -22,7 +17,8 @@
     "ntfy_topic": ""
   },
   "retry": {
-    "attempts": 5,
+    "attempts": 3,
     "backoff_seconds": 10
-  }
+  },
+  "schedule_interval_hours": 12
 }
