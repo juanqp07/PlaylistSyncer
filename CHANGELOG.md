@@ -10,6 +10,9 @@ All notable changes to this project will be documented in this file.
 - **UI:** Corrección de alineación en botones de playlist y mejoras de estilo.
 - **Historial:** Añadido fecha/hora exacta y contador de canciones descargadas.
 - **Audio:** Añadido selector de Bitrate (Auto, 320k, 256k, 192k, 128k).
+- **Mantenimiento:** Nueva herramienta "Reparar Archivos" para eliminar IDs/Emojis y corregir M3Us.
+- **Log:** Mejora visual de logs con emojis y textos claros en Español.
+- **Core:** Estandarización de nombres de archivo `{Artista} - {Titulo}` y limpieza de rutas M3U.
 - **CI/CD:** Docker tagging automatizado basado en versión del código.
 
 ## [1.3.0] - 2025-12-13

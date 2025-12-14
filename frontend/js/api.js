@@ -71,4 +71,10 @@ export class API {
         if (!res.ok) throw new Error("Failed to set schedule");
         return await res.json();
     }
+
+    async sanitize() {
+        const res = await fetch(`${this.baseUrl}/api/sanitize`, { method: 'POST' });
+        if (!res.ok) throw new Error("Failed to sanitize files");
+        return await res.json();
+    }
 }

@@ -346,7 +346,7 @@ class DownloaderManager:
                 cmd = [
                     "spotdl", "sync", url, 
                     "--save-file", str(save_file), 
-                    "--output", str(self.output_dir),
+                    "--output", f"{self.output_dir}/{{artist}} - {{title}}.{{ext}}",
                     "--format", fmt,
                     "--bitrate", bitrate,
                     "--m3u", m3u_arg
@@ -377,6 +377,9 @@ class DownloaderManager:
                 else:
                      # Default to 0 (best VBR) if no specific bitrate
                      cmd.extend(["--audio-quality", "0"])
+                     
+                # Add output template for yt-dlp too to be consistent
+                cmd.extend(["-o", "%(artist)s - %(title)s.%(ext)s"])
 
                 cmd.extend(extra_ytdlp)
             
@@ -419,7 +422,7 @@ class DownloaderManager:
                                         
                                     p = Path(line)
                                     filename = p.name
-                                    new_lines.append(f"./{filename}")
+                                    new_lines.append(filename)
                                 
                                 m3u_file.write_text("\n".join(new_lines), encoding='utf-8')
                                 logger.info(f"Corregidas rutas en M3U: {m3u_file}")
@@ -478,6 +481,104 @@ class DownloaderManager:
         for t in tasks:
             if self.stop_requested.is_set(): break
             q.put(t)
+            
+        # Wait
+        q.join()
+        
+        # Kill any remaining
+        self.stop()
+        
+        return results
+
+    def sanitize_files(self) -> Dict[str, int]:
+        """
+        Renames files in downloads directory to remove:
+        1. Youtube IDs in brackets e.g. [dQw4w9WgXcQ]
+        2. Emojis and special characters
+        3. Updates M3U8 files to match new names
+        """
+        import re
+        
+        renamed_count = 0
+        m3u_updated_count = 0
+        file_map = {} # old_name -> new_name
+        
+        # Regex to find brackets at the end of stem: "Song Title [ID].ext"
+        bracket_pattern = re.compile(r'\s*\[[^\]]+\]')
+        
+        logger.info("🔪 Iniciando sanitización de archivos...")
+        for file in self.output_dir.glob("*"):
+            if file.is_dir() or file.suffix == '.m3u8' or file.name.startswith('.'):
+                continue
+                
+            original_name = file.name
+            stem = file.stem
+            suffix = file.suffix
+            
+            # Remove brackets
+            new_stem = bracket_pattern.sub('', stem)
+            
+            # Remove emojis logic (basic range check using ascii encode/decode)
+            new_stem = new_stem.encode('ascii', 'ignore').decode('ascii').strip()
+            
+            # Clean up double spaces
+            new_stem = re.sub(r'\s+', ' ', new_stem).strip()
+            
+            # If changed, rename
+            new_name = f"{new_stem}{suffix}"
+            if new_name != original_name and new_stem:
+                try:
+                    target = self.output_dir / new_name
+                    if not target.exists():
+                        file.rename(target)
+                        file_map[original_name] = new_name
+                        renamed_count += 1
+                        logger.info(f"Renamed: {original_name} -> {new_name}")
+                    else:
+                        logger.warning(f"Target exists, skipping: {new_name}")
+                except Exception as e:
+                    logger.error(f"Error renaming {original_name}: {e}")
+
+        # 2. Update M3U Files
+        if file_map:
+            logger.info("📝 Actualizando listas M3U...")
+            for m3u in self.output_dir.glob("*.m3u8"):
+                try:
+                    content = m3u.read_text(encoding='utf-8')
+                    lines = content.splitlines()
+                    new_lines = []
+                    modified = False
+                    
+                    for line in lines:
+                        if line.strip().startswith("#") or not line.strip():
+                            new_lines.append(line)
+                            continue
+                            
+                        path = Path(line)
+                        fname = path.name
+                        
+                        if fname in file_map:
+                            new_fname = file_map[fname]
+                            # Remove leading ./ logic
+                            new_lines.append(new_fname)
+                            modified = True
+                        else:
+                            # Also clean existing ./ if present?
+                            if line.startswith("./"):
+                                new_lines.append(line[2:])
+                                modified = True
+                            else:
+                                new_lines.append(line)
+                    
+                    if modified:
+                        m3u.write_text("\n".join(new_lines), encoding='utf-8')
+                        m3u_updated_count += 1
+                        
+                except Exception as e:
+                    logger.error(f"Error updating M3U {m3u.name}: {e}")
+
+        logger.info(f"✨ Sanitización completada: {renamed_count} archivos renombrados, {m3u_updated_count} listas actualizadas.")
+        return {"renamed": renamed_count, "m3u_updated": m3u_updated_count}
             
         threads = []
         for _ in range(concurrency):

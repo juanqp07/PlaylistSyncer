@@ -389,6 +389,19 @@ h2 {
     background: rgba(239, 68, 68, 0.2);
 }
 
+.btn-warning,
+.button.warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.btn-warning:hover,
+.button.warning:hover {
+    background: rgba(245, 158, 11, 0.25);
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+}
+
 /* Layout helpers */
 .actions {
     display: flex;

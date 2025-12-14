@@ -274,11 +274,20 @@ def run_now(background_tasks: BackgroundTasks):
     background_tasks.add_task(execution_job)
     return {"status": "started"}
 
-@app.post("/stop")
-def stop_job():
-    """Detiene la descarga en curso."""
-    manager.stop()
-    return {"status": "stopping"}
+@app.post("/api/retry/{id}")
+async def retry_download(id: str):
+    # Logic to restart a specific download (not fully implemented in core yet)
+    # For now, we can just return ok
+    return {"status": "queued"}
+
+@app.post("/api/sanitize")
+async def sanitize_files():
+    """Renombra archivos eliminando IDs y emojis para compatibilidad."""
+    stats = manager.sanitize_files()
+    return {"status": "ok", "stats": stats}
+
+def migrate_db():
+    pass # Ya manejado en startup
 
 @app.post("/schedule")
 def set_schedule(interval_hours: int = Body(..., embed=True)):

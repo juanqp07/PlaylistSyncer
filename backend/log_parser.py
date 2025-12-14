@@ -60,7 +60,14 @@ class LogParser:
                 updates["state"] = "downloading"
                 updates["log_message"] = f"{C_CYAN}⬇ Descargando: {clean}{C_RESET}"
 
-        # 3. Rate Limits (Friendly)
+        # 3. SpotDL Skipping
+        elif "Skipping" in line and tool == "spotdl":
+            clean = line.replace("Skipping", "").strip().replace('"', '')
+            if "http" not in clean: # avoid "Downloading https://..." urls
+                updates["current_song"] = clean
+                updates["state"] = "skipping"
+                updates["log_message"] = f"{C_CYAN}⏭️ Saltando: {clean}{C_RESET}"
+        # 4. Rate Limits (Friendly)
         elif "rate/request limit" in line:
             wait_time = "un momento"
             match = re.search(r"after:\s*(\d+)", line)
@@ -72,7 +79,7 @@ class LogParser:
             updates["log_message"] = f"{C_YELLOW}⏳ Límite de Spotify. Esperando {wait_time}...{C_RESET}"
             updates["log_level"] = "warning"
 
-        # 4. Success (SpotDL)
+        # 5. Success (SpotDL)
         elif "Downloaded" in line and tool == "spotdl":
             match = re.search(r'Downloaded "(.+?)"', line)
             song_name = match.group(1) if match else "Canción"
@@ -80,7 +87,7 @@ class LogParser:
             updates["current_song"] = f"✔ {song_name}"
             updates["log_message"] = f"{C_GREEN}✔ Completado: {song_name}{C_RESET}"
 
-        # 5. Already Downloaded
+        # 6. Already Downloaded
         elif "has already been downloaded" in line:
              # Try to extract title
              song_name = "Canción"
@@ -93,7 +100,7 @@ class LogParser:
              updates["downloaded_increment"] = 1
              updates["log_message"] = f"{C_GREEN}✔ Ya existe: {song_name}{C_RESET}"
 
-        # 6. YT-DLP Item Progress
+        # 7. YT-DLP Item Progress
         elif "Downloading item" in line and "of" in line:
              match = re.search(r"Downloading item (\d+) of (\d+)", line)
              if match:
@@ -102,7 +109,7 @@ class LogParser:
                  updates["total_songs"] = total
                  updates["log_message"] = f"{C_CYAN}🎵 Procesando canción {current} de {total}{C_RESET}"
 
-        # 7. YT-DLP Warnings (JS Runtime, etc)
+        # 8. YT-DLP Warnings (JS Runtime, etc)
         elif "WARNING:" in line:
             clean = line.split("WARNING:")[1].strip()
             
@@ -117,7 +124,7 @@ class LogParser:
             updates["log_message"] = f"{C_YELLOW}⚠ {clean}{C_RESET}"
             updates["log_level"] = "warning"
 
-        # 8. YT-DLP Errors
+        # 9. YT-DLP Errors
         elif "ERROR:" in line or "PermissionError" in line:
              clean = line.replace("ERROR:", "").replace("downloader.core:", "").strip()
              if "PermissionError" in line:
@@ -128,11 +135,11 @@ class LogParser:
              updates["log_message"] = f"{C_RED}❌ Error: {clean}{C_RESET}"
              updates["log_level"] = "error"
 
-        # 9. Skip Noise (Webpage, etc)
+        # 10. Skip Noise (Webpage, etc)
         elif "Downloading webpage" in line or "Extracting URL" in line:
              pass # Silent
 
-        # 10. Generic "Processing" for YT-DLP
+        # 11. Generic "Processing" for YT-DLP
         elif "[download]" in line and "%" in line:
              # 23.5% of 10.00MiB at 2.00MiB/s ETA 00:05
              updates["state"] = "downloading"

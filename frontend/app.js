@@ -297,6 +297,22 @@ function showTab(tabId) {
     if (tabId === 'history') loadHistory();
 }
 
+async function runSanitize() {
+    const btn = document.getElementById('btn-sanitize');
+    if (!confirm("⚠️ ¿Seguro que quieres renombrar los archivos?\nEsto eliminará IDs y emojis de los nombres.")) return;
+
+    try {
+        btn.disabled = true;
+        const res = await api.sanitize();
+        const stats = res.stats;
+        ui.showToast(`Sanitización: ${stats.renamed} renombrados, ${stats.m3u_updated} listas corregidas.`, "success");
+    } catch (e) {
+        ui.showToast("Error al sanitizar archivos", "error");
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 // === Init ===
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -318,6 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-add-pl').onclick = addPlaylist;
     document.getElementById('btn-download').onclick = runNow;
     document.getElementById('btn-stop').onclick = stopJob;
+    document.getElementById('btn-sanitize').onclick = runSanitize;
     document.getElementById('btn-clear-console').onclick = () => {
         document.getElementById('console-logs').innerHTML = '';
     };
