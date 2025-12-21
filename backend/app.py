@@ -198,6 +198,10 @@ class ConfigUpdate(BaseModel):
     spotdl_extra_args: List[str] = None
     ytdlp_extra_args: List[str] = None
 
+class SettingsUpdate(BaseModel):
+    output_dir: Optional[str] = None
+    concurrency: Optional[int] = None
+
 class Playlist(BaseModel):
     id: str
     name: str
@@ -209,22 +213,31 @@ def get_config():
     manager.reload_config()
     config = manager.config.copy()
     config["is_docker"] = (BASE_DIR.name == "app")
-    config["version"] = "1.7.2" 
+    config["version"] = "1.7.5" 
     return config
 
 @app.get("/status")
 def get_status():
     return manager.status
 
-@app.post("/config")
-def update_config(cfg: Dict[str, Any]):
+@app.post("/settings")
+def update_settings(settings: SettingsUpdate):
     try:
-        current = json.loads(CONFIG_PATH.read_text())
-    except:
-        current = {}
+        current = manager.config.copy()
         
-    current.update(cfg)
-    CONFIG_PATH.write_text(json.dumps(current, indent=2), encoding="utf-8")
+        # Merge
+        if settings.output_dir is not None:
+             # Sanitize incoming path too
+             path = settings.output_dir
+             if "/app/app/" in path:
+                 path = path.replace("/app/app/", "/app/")
+             current["output_dir"] = path
+             
+        if settings.concurrency is not None: current["concurrency"] = settings.concurrency
+        CONFIG_PATH.write_text(json.dumps(current, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.error(f"Failed to update settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update settings")
     manager.reload_config()
     manager.verify_dependencies() 
     return manager.config

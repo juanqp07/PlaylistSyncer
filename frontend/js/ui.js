@@ -90,6 +90,22 @@ export class UI {
         });
     }
 
+    formatDuration(totalSeconds) {
+        let sec = parseInt(totalSeconds);
+        if (isNaN(sec)) return '0s';
+
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = Math.floor(sec % 60);
+
+        const parts = [];
+        if (h > 0) parts.push(`${h}h`);
+        if (m > 0) parts.push(`${m}m`);
+        if (s > 0 || parts.length === 0) parts.push(`${s}s`);
+
+        return parts.join(' ');
+    }
+
     renderHistory(data) {
         const list = document.getElementById('history-list');
         list.innerHTML = '';
@@ -108,7 +124,7 @@ export class UI {
                 day: '2-digit', month: '2-digit', year: 'numeric',
                 hour: '2-digit', minute: '2-digit'
             });
-            const duration = Math.round(entry.duration_seconds);
+            const durationStr = this.formatDuration(entry.duration_seconds);
 
             item.innerHTML = `
                 <div class="h-header">
@@ -117,7 +133,7 @@ export class UI {
                 </div>
                 <div class="h-details">
                     <span>Canciones: <strong>${entry.items_downloaded}</strong> / ${entry.total_items}</span>
-                    <span>⏱ ${duration}s</span>
+                    <span>⏱ ${durationStr}</span>
                 </div>
             `;
             list.appendChild(item);

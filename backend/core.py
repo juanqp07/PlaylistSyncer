@@ -54,7 +54,13 @@ class DownloaderManager:
         
         # Si no se pasó output_dir en init, usar el del config
         if not self.output_dir:
-            self.output_dir = Path(self.config.get("output_dir", DEFAULT_OUTPUT_DIR))
+            raw_path = self.config.get("output_dir", DEFAULT_OUTPUT_DIR)
+            # HARD FIX: Detect and fix double-app path caused by relative path misconfiguration in Docker
+            s_path = str(raw_path)
+            if "/app/app/" in s_path:
+                s_path = s_path.replace("/app/app/", "/app/")
+                logger.warning(f"⚠️ Detected broken path '{raw_path}', auto-corrected to '{s_path}'")
+            self.output_dir = Path(s_path)
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.verify_dependencies()
@@ -200,6 +206,25 @@ class DownloaderManager:
         else:
             try:
                 self.config = json.loads(self.config_path.read_text(encoding="utf-8"))
+                
+                # CRITICAL: Sanitize loaded path immediately
+                raw_path = self.config.get("output_dir")
+                
+                # FORCE CORRECT PATH IN DOCKER
+                # This overrides any config.json nonsense
+                if os.path.exists("/app/.dockerenv") or os.path.exists("/app/app.py") or os.path.exists("/app/backend/app.py"):
+                     self.config["output_dir"] = "/app/downloads"
+                     self.output_dir = Path("/app/downloads")
+                     if raw_path != "/app/downloads":
+                         logger.warning(f"🐳 Docker Detected: Forcing output_dir to /app/downloads (Ignored config: {raw_path})")
+                else:
+                    if raw_path:
+                        s_path = str(raw_path)
+                        if "/app/app/" in s_path:
+                             s_path = s_path.replace("/app/app/", "/app/")
+                             self.config["output_dir"] = s_path
+                        self.output_dir = Path(self.config["output_dir"])
+
             except json.JSONDecodeError as e:
                 logger.error(f"Error parseando config: {e}")
                 raise
@@ -437,6 +462,13 @@ class DownloaderManager:
             # CRITICAL: Playlist Isolation
             # Ensure output_dir is absolute and exists
             self.output_dir = self.output_dir.resolve()
+            
+            # HARD FIX: Double check for double /app/app which shouldn't happen with new logic but just in case
+            s_out = str(self.output_dir)
+            if "/app/app/" in s_out:
+                new_out = s_out.replace("/app/app/", "/app/")
+                logger.warning(f"⚠️ Caught runtime double-app path: {s_out} -> {new_out}")
+                self.output_dir = Path(new_out)
             try:
                 if not self.output_dir.exists():
                      self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -451,14 +483,19 @@ class DownloaderManager:
                 target_dir = self.output_dir / safe_pl_name
                 
                 # ROBUST MKDIR
-                if not target_dir.exists():
-                    try:
-                        target_dir.mkdir(parents=True, exist_ok=True)
-                    except Exception as e:
-                        logger.error(f"Error creating playlist folder {target_dir}: {e}")
-                        # Fallback to root? No, just continue, maybe it exists now
-                
+                try:
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    logger.error(f"Error creating dir {target_dir}: {e}")
+
                 m3u_arg = f"{target_dir}/{safe_pl_name}.m3u8"
+                
+                # CRITICAL FIX: Ensure the PARENT directory of the M3U file exists before SpotDL tries to write to it
+                # This handles cases where SpotDL resolves paths weirdly or target_dir failed silently
+                try:
+                    Path(m3u_arg).parent.mkdir(parents=True, exist_ok=True)
+                except:
+                    pass
             else:
                  # Single song or untracked -> root downloads
                  target_dir = self.output_dir

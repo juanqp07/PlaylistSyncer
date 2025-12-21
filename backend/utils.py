@@ -2,8 +2,30 @@ import unicodedata
 import re
 from pathlib import Path
 
+import os
+
 # Constants
-DEFAULT_OUTPUT_DIR = Path("./downloads")
+# Determine path based on location to avoid CWD ambiguity
+_utils_dir = Path(__file__).resolve().parent
+
+# Logic:
+# Check if we are in Docker environment (standard path /app exists)
+# Check if we are in Docker environment
+# We check for .dockerenv OR common app paths
+if Path("/app/.dockerenv").exists() or Path("/app/app.py").exists() or Path("/app/backend/app.py").exists():
+    DEFAULT_OUTPUT_DIR = Path("/app/downloads")
+else:
+    # Use relative for local dev
+    # Determine path based on location to avoid CWD ambiguity
+    _utils_dir = Path(__file__).resolve().parent
+    if _utils_dir.name == "app": 
+        ROOT_DIR = _utils_dir
+    elif _utils_dir.name == "backend": 
+        ROOT_DIR = _utils_dir.parent
+    else:
+        ROOT_DIR = Path(os.getcwd())
+        
+    DEFAULT_OUTPUT_DIR = ROOT_DIR / "downloads"
 
 def get_safe_filename(input_str: str) -> str:
     """

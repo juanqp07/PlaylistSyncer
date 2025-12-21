@@ -2,6 +2,20 @@ Registro de Cambios
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.7.5] - 2025-12-21
+### Corregido
+- **Config Path Persistence**: Solución definitiva al error de rutas duplicadas (`/app/app/`). Ahora el sistema depura activamente el archivo de configuración cada vez que se carga o se guarda, corrigiendo automáticamente cualquier ruta corrupta heredada.
+
+## [1.7.4] - 2025-12-21
+### Corregido
+- **Urgent Fix M3U8 Error**: Corregido bug donde SpotDL intentaba escribir el archivo M3U8 antes de que la carpeta de destino existiera plenamente en algunos entornos (race condition o path resolution issue). Se fuerza la creación de la carpeta justo antes de la ejecución.
+- **Auto-Corrección de Rutas**: Sistema de detección y corrección automática para rutas corruptas tipo `/app/app/` detectadas en la configuración persistente.
+
+## [1.7.3] - 2025-12-21
+### Corregido
+- **Rutas duplicadas**: Solucionado bug crítico donde las rutas se duplicaban (ej: `/app/app/downloads`) en contenedores Docker, causando errores de `FileNotFoundError`.
+- **Formato Historial**: La duración de las tareas ahora se muestra en formato legible (ej: `2m 30s`) en lugar de segundos crudos.
+
 ## [1.7.2] - 2025-12-21
 ### Código (Refactor)
 - **Centralización (DRY)**: Creado nuevo módulo `backend/utils.py` para centralizar la sanitización de nombres de archivo y constantes.
