@@ -213,7 +213,7 @@ def get_config():
     manager.reload_config()
     config = manager.config.copy()
     config["is_docker"] = (BASE_DIR.name == "app")
-    config["version"] = "1.7.6" 
+    config["version"] = "1.7.7" 
     return config
 
 @app.get("/status")

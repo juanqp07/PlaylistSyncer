@@ -92,18 +92,18 @@ export class UI {
 
     formatDuration(totalSeconds) {
         let sec = parseInt(totalSeconds);
-        if (isNaN(sec)) return '0s';
+        if (isNaN(sec)) return '0 segundos';
 
         const h = Math.floor(sec / 3600);
         const m = Math.floor((sec % 3600) / 60);
         const s = Math.floor(sec % 60);
 
         const parts = [];
-        if (h > 0) parts.push(`${h}h`);
-        if (m > 0) parts.push(`${m}m`);
-        if (s > 0 || parts.length === 0) parts.push(`${s}s`);
+        if (h > 0) parts.push(`${h} ${h === 1 ? 'hora' : 'horas'}`);
+        if (m > 0) parts.push(`${m} ${m === 1 ? 'minuto' : 'minutos'}`);
+        if (s > 0 || parts.length === 0) parts.push(`${s} ${s === 1 ? 'segundo' : 'segundos'}`);
 
-        return parts.join(' ');
+        return parts.join(', ');
     }
 
     renderHistory(data) {

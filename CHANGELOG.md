@@ -1,7 +1,3 @@
-Registro de Cambios
-
-Todos los cambios notables en este proyecto serán documentados en este archivo.
-
 ## [1.7.6] - 2025-12-21
 ### Corregido
 - **Error Crítico M3U**: Desactivada la generación nativa de M3U de SpotDL para evitar un bug de la librería que genera rutas corruptas (`/app/app/...`) en Docker. Ahora se usa el generador manual robusto para todas las descargas.
