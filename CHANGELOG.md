@@ -2,6 +2,10 @@ Registro de Cambios
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.7.1] - 2025-12-21
+### Corregido
+- **Mantenimiento Recursivo**: La herramienta de "Reparar Archivos" (Sanitizar) ahora busca recursivamente en todas las subcarpetas de playlists. Esto asegura que los archivos dentro de las nuevas carpetas aisladas sean procesados correctamente.
+
 ## [1.7.0] - 2025-12-21
 ### Añadido
 - **Carpeta por Playlist**: Cada playlist ahora descarga su contenido en un subdirectorio propio dentro de `downloads/`, incluyendo su archivo `.m3u8` y la carpeta `.sync`.
