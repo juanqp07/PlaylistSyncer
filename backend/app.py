@@ -17,8 +17,10 @@ except ImportError:
 # Database Module import
 try:
     import backend.database as db
+    from backend.utils import get_safe_filename, DEFAULT_OUTPUT_DIR
 except ImportError:
     import database as db
+    from utils import get_safe_filename, DEFAULT_OUTPUT_DIR
 
 import json
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -207,7 +209,7 @@ def get_config():
     manager.reload_config()
     config = manager.config.copy()
     config["is_docker"] = (BASE_DIR.name == "app")
-    config["version"] = "1.7.1" 
+    config["version"] = "1.7.2" 
     return config
 
 @app.get("/status")
@@ -252,17 +254,9 @@ def delete_playlist(id: str):
         # Try to delete folder
         try:
            manager.reload_config()
-           output_dir = Path(manager.config.get("output_dir", "./downloads"))
+           output_dir = Path(manager.config.get("output_dir", DEFAULT_OUTPUT_DIR))
            
-           import unicodedata
-           # Normalize unicode characters to their base form (NFD)
-           nfkd_form = unicodedata.normalize('NFKD', pl["name"])
-           # Filter out non-spacing mark characters (accents) and encode to ASCII
-           ascii_name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-           
-           safe_name = "".join(c for c in ascii_name if c.isalnum() or c in (' ', '-', '_')).strip()
-           if not safe_name: safe_name = "Playlist_Unknown" # Should match core
-
+           safe_name = get_safe_filename(pl["name"])
            target_dir = output_dir / safe_name
            
            import shutil
@@ -433,16 +427,10 @@ def execution_job():
 
 def update_track_count_for_playlist(p):
     manager.reload_config()
-    output_dir = Path(manager.config.get("output_dir", "./downloads"))
+    output_dir = Path(manager.config.get("output_dir", DEFAULT_OUTPUT_DIR))
     
     m3u_name = p["name"]
-    
-    import unicodedata
-    nfkd_form = unicodedata.normalize('NFKD', m3u_name)
-    ascii_name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    
-    safe_name = "".join(c for c in ascii_name if c.isalnum() or c in (' ', '-', '_')).strip()
-    if not safe_name: safe_name = "Playlist_Unknown"
+    safe_name = get_safe_filename(m3u_name)
     
     # Check in subfolder first (New Structure)
     m3u_path = output_dir / safe_name / f"{safe_name}.m3u8"
@@ -469,16 +457,10 @@ def get_playlist_tracks(id: str):
         raise HTTPException(status_code=404, detail="Playlist not found")
 
     m3u_name = target_pl["name"]
-    
-    import unicodedata
-    nfkd_form = unicodedata.normalize('NFKD', m3u_name)
-    ascii_name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    
-    safe_name = "".join(c for c in ascii_name if c.isalnum() or c in (' ', '-', '_')).strip()
-    if not safe_name: safe_name = "Playlist_Unknown"
+    safe_name = get_safe_filename(m3u_name)
     
     manager.reload_config()
-    output_dir = Path(manager.config.get("output_dir", "./downloads"))
+    output_dir = Path(manager.config.get("output_dir", DEFAULT_OUTPUT_DIR))
     
     # Check in subfolder first (New Structure)
     m3u_path = output_dir / safe_name / f"{safe_name}.m3u8"

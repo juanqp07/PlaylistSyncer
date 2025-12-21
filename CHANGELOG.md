@@ -2,6 +2,11 @@ Registro de Cambios
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.7.2] - 2025-12-21
+### Código (Refactor)
+- **Centralización (DRY)**: Creado nuevo módulo `backend/utils.py` para centralizar la sanitización de nombres de archivo y constantes.
+- **Limpieza**: Eliminada la duplicación de código en `core.py` y `app.py`, haciendo el sistema más mantenible y menos propenso a errores de inconsistencia en nombres de carpetas.
+
 ## [1.7.1] - 2025-12-21
 ### Corregido
 - **Mantenimiento Recursivo**: La herramienta de "Reparar Archivos" (Sanitizar) ahora busca recursivamente en todas las subcarpetas de playlists. Esto asegura que los archivos dentro de las nuevas carpetas aisladas sean procesados correctamente.

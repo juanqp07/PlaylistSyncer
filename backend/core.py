@@ -16,8 +16,10 @@ import signal
 # Robust Import for LogParser
 try:
     from backend.log_parser import LogParser
+    from backend.utils import get_safe_filename, DEFAULT_OUTPUT_DIR
 except ImportError:
     from log_parser import LogParser
+    from utils import get_safe_filename, DEFAULT_OUTPUT_DIR
 
 # Configurar logger localmente para este módulo
 logger = logging.getLogger("downloader.core")
@@ -30,8 +32,6 @@ class DownloaderManager:
         self.output_dir = Path(output_dir) if output_dir else None
         self.broadcast_func = broadcast_func
         self.executor = ThreadPoolExecutor(max_workers=1)
-        self.parser = LogParser()
-        
         self.parser = LogParser()
         
         # Setup WS Logger removed - Manual broadcast in _run_cmd
@@ -54,7 +54,7 @@ class DownloaderManager:
         
         # Si no se pasó output_dir en init, usar el del config
         if not self.output_dir:
-            self.output_dir = Path(self.config.get("output_dir", "./downloads"))
+            self.output_dir = Path(self.config.get("output_dir", DEFAULT_OUTPUT_DIR))
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.verify_dependencies()
@@ -445,17 +445,8 @@ class DownloaderManager:
 
             target_dir = self.output_dir
             if m3u_name:
-                # Sanitize to ASCII for filesystem safety
-                import unicodedata
-                # Normalize unicode characters to their base form (NFD)
-                nfkd_form = unicodedata.normalize('NFKD', m3u_name)
-                # Filter out non-spacing mark characters (accents) and encode to ASCII
-                ascii_name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-                
-                # Alphanumeric + safe chars
-                safe_pl_name = "".join(c for c in ascii_name if c.isalnum() or c in (' ', '-', '_')).strip()
-                if not safe_pl_name: # Fallback if empty after sanitization
-                    safe_pl_name = "Playlist_Unknown"
+                # Sanitize using centralized logic
+                safe_pl_name = get_safe_filename(m3u_name)
                     
                 target_dir = self.output_dir / safe_pl_name
                 
@@ -795,29 +786,15 @@ class DownloaderManager:
         3. Updates M3U8 files to match new names
         """
         import re
-        import unicodedata
+    def sanitize_files(self) -> Dict[str, int]:
+        """
+        Renames files in downloads directory AND subdirectories to remove:
+        1. Youtube IDs in brackets e.g. [dQw4w9WgXcQ]
+        2. Emojis and special characters (Preserving Spanish accents)
+        3. Updates M3U8 files to match new names
+        """
+        import re
         
-        def remove_accents(input_str):
-            # Normalize unicode characters to their base form (NFD)
-            nfkd_form = unicodedata.normalize('NFKD', input_str)
-            # Filter out non-spacing mark characters (accents)
-            ascii_str = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-            
-            # Manual replacements for edge cases NFD doesn't cover (like Ø)
-            replacements = {
-                'Ø': 'O', 'ø': 'o',
-                'Æ': 'AE', 'æ': 'ae',
-                'Œ': 'OE', 'œ': 'oe',
-                'ß': 'ss',
-                'Ð': 'D', 'ð': 'd',
-                'Þ': 'TH', 'þ': 'th',
-                'Ł': 'L', 'ł': 'l'
-            }
-            for char, repl in replacements.items():
-                ascii_str = ascii_str.replace(char, repl)
-                
-            return ascii_str
-
         renamed_count = 0
         m3u_updated_count = 0
         
@@ -845,15 +822,8 @@ class DownloaderManager:
                 # 1. Remove brackets (Youtube IDs)
                 new_stem = bracket_pattern.sub('', stem)
                 
-                # 2. Transliterate (Accents -> ASCII) ie: á -> a, ñ -> n
-                new_stem = remove_accents(new_stem)
-
-                # 3. Clean Special Chars
-                allowed_chars = " -_.,()'&"
-                new_stem = "".join(c for c in new_stem if c.isalnum() or c in allowed_chars).strip()
-                
-                # 4. Clean up double spaces
-                new_stem = re.sub(r'\s+', ' ', new_stem).strip()
+                # 2. Use Centralized Sanitization (Handles accents, special chars, double spaces)
+                new_stem = get_safe_filename(new_stem)
                 
                 # If changed, rename
                 new_name = f"{new_stem}{suffix}"
