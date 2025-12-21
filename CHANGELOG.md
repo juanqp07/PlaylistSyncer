@@ -2,6 +2,18 @@ Registro de Cambios
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.7.0] - 2025-12-21
+### Añadido
+- **Carpeta por Playlist**: Cada playlist ahora descarga su contenido en un subdirectorio propio dentro de `downloads/`, incluyendo su archivo `.m3u8` y la carpeta `.sync`.
+- **Limpieza Automática**: Al eliminar una playlist desde la UI, se borra también su carpeta de descargas para liberar espacio.
+- **Limpieza de Títulos (SpotDL)**: Ahora se eliminan automáticamente términos como "(Video Oficial)", "(Lyric)", "[Letra]", etc., de los títulos de YouTube antes de buscarlos en Spotify, reduciendo errores de "No results found".
+- **Responsive Móvil**: Mejoras significativas en la vista de tarjetas de Playlists y Navbar para dispositivos móviles.
+
+### Corregido
+- **Crash de Inicio**: Reparado error de indentación crítico en `core.py`.
+- **Rutas**: Solucionado error `FileNotFoundError` asegurando la creación recursiva de directorios en tiempo de ejecución.
+- **Nombres Seguros**: Forzado de nombres de carpeta ASCII para evitar problemas de compatibilidad con emojis/acentos en el sistema de archivos.
+
 ## [1.6.0] - 2025-12-14
 ### Añadido
 - **Modo Turbo (Batch)**: Procesamiento en lotes de 50 canciones para playlists de YouTube. Reduce drásticamente el tiempo de inicio y consumo de CPU.

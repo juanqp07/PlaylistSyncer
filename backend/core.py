@@ -434,18 +434,57 @@ class DownloaderManager:
             cmd = []
             m3u_arg = None
             
+            # CRITICAL: Playlist Isolation
+            # Ensure output_dir is absolute and exists
+            self.output_dir = self.output_dir.resolve()
+            try:
+                if not self.output_dir.exists():
+                     self.output_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                logger.error(f"Failed to ensure root output dir {self.output_dir}: {e}")
+
+            target_dir = self.output_dir
             if m3u_name:
-                 safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
-                 m3u_arg = f"{self.output_dir}/{safe_name}.m3u8"
-                 
+                # Sanitize to ASCII for filesystem safety
+                import unicodedata
+                # Normalize unicode characters to their base form (NFD)
+                nfkd_form = unicodedata.normalize('NFKD', m3u_name)
+                # Filter out non-spacing mark characters (accents) and encode to ASCII
+                ascii_name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+                
+                # Alphanumeric + safe chars
+                safe_pl_name = "".join(c for c in ascii_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                if not safe_pl_name: # Fallback if empty after sanitization
+                    safe_pl_name = "Playlist_Unknown"
+                    
+                target_dir = self.output_dir / safe_pl_name
+                
+                # ROBUST MKDIR
+                if not target_dir.exists():
+                    try:
+                        target_dir.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        logger.error(f"Error creating playlist folder {target_dir}: {e}")
+                        # Fallback to root? No, just continue, maybe it exists now
+                
+                m3u_arg = f"{target_dir}/{safe_pl_name}.m3u8"
+            else:
+                 # Single song or untracked -> root downloads
+                 target_dir = self.output_dir
+                 if m3u_name: 
+                     pass
+
             if tool == "spotdl":
                 # Construir comando (SpotDL)
                 import hashlib
-                sync_dir = self.output_dir / ".sync"
-                try:
-                    sync_dir.mkdir(parents=True, exist_ok=True)
-                except Exception as e:
-                    logger.warning(f"⚠️ No se pudo crear directorio .sync: {e}")
+                # Sync dir inside the target folder to keep it self-contained
+                sync_dir = target_dir / ".sync"
+                
+                if not sync_dir.exists():
+                    try:
+                        sync_dir.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        logger.warning(f"⚠️ No se pudo crear directorio .sync: {e}")
                 
                 # If url is a search query (no protocol), hash might be ugly, but functional
                 if isinstance(url, list):
@@ -489,7 +528,7 @@ class DownloaderManager:
                 cmd.extend(inputs) # Add all titles/urls
                 
                 cmd.extend([
-                    "--output", f"{self.output_dir}/{{artist}} - {{title}}",
+                    "--output", f"{target_dir}/{{artist}} - {{title}}",
                     "--format", fmt,
                     "--bitrate", bitrate,
                     "--restrict", "ascii", # Force ASCII filenames
@@ -661,12 +700,25 @@ class DownloaderManager:
                         batch_size = 50
                         current_batch = []
                         
+                        # Pre-compile regex for cleaning titles
+                        import re
+                        # Patterns to remove: text inside parens/brackets containing "video", "oficial", "official", "lyric"
+                        # Also explicit "ft." junk if needed, but usually minimal is better.
+                        # Case insensitive.
+                        clean_pattern = re.compile(r'\s*[\(\[](?:[^)\].]*?(?:video|official|oficial|lyric|letra)[^)\].]*?)[\)\]]', re.IGNORECASE)
+
                         for title in titles:
                             if title.strip():
-                                current_batch.append(title.strip())
-                                if len(current_batch) >= batch_size:
-                                    tasks.append((current_batch, "spotdl", m3u_name))
-                                    current_batch = []
+                                # CLEAN TITLE
+                                clean_title = clean_pattern.sub('', title)
+                                # Clean up extra spaces
+                                clean_title = re.sub(r'\s+', ' ', clean_title).strip()
+                                
+                                if clean_title:
+                                    current_batch.append(clean_title)
+                                    if len(current_batch) >= batch_size:
+                                        tasks.append((current_batch, "spotdl", m3u_name))
+                                        current_batch = []
                         
                         # Add remaining
                         if current_batch:

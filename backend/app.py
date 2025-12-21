@@ -207,7 +207,7 @@ def get_config():
     manager.reload_config()
     config = manager.config.copy()
     config["is_docker"] = (BASE_DIR.name == "app")
-    config["version"] = "1.6.0" 
+    config["version"] = "1.7.0" 
     return config
 
 @app.get("/status")
@@ -244,7 +244,34 @@ def save_playlist(playlist: Playlist):
 
 @app.delete("/playlists/{id}")
 def delete_playlist(id: str):
-    db.delete_playlist(id)
+    pl = db.get_playlist(id)
+    if pl:
+        # Delete from DB
+        db.delete_playlist(id)
+        
+        # Try to delete folder
+        try:
+           manager.reload_config()
+           output_dir = Path(manager.config.get("output_dir", "./downloads"))
+           
+           import unicodedata
+           # Normalize unicode characters to their base form (NFD)
+           nfkd_form = unicodedata.normalize('NFKD', pl["name"])
+           # Filter out non-spacing mark characters (accents) and encode to ASCII
+           ascii_name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+           
+           safe_name = "".join(c for c in ascii_name if c.isalnum() or c in (' ', '-', '_')).strip()
+           if not safe_name: safe_name = "Playlist_Unknown" # Should match core
+
+           target_dir = output_dir / safe_name
+           
+           import shutil
+           if target_dir.exists() and target_dir.is_dir():
+               shutil.rmtree(target_dir)
+               logger.info(f"Deleted folder: {target_dir}")
+        except Exception as e:
+            logger.error(f"Failed to delete folder for {pl['name']}: {e}")
+            
     return {"status": "deleted"}
 
 @app.post("/playlists/{id}/sync")
@@ -344,16 +371,18 @@ def execution_job_single(p: Dict):
 
 def execution_job():
     logger.info("Starting scheduled execution...")
+    import time
+    start_time = time.time()
+    total_processed = 0
+    downloaded_count = 0
+    
     try:
         # Use DB
         playlists = db.get_playlists()
         if not playlists:
+            logger.info("No playlists to schedule.")
             return
 
-        total_processed = 0
-        import time
-        start_time = time.time()
-        
         for p in playlists:
             urls = p.get("urls", [])
             if not urls:
@@ -364,8 +393,13 @@ def execution_job():
             manager.update_status("playlist_name", p['name'])
             
             # Process
-            manager.process_urls(urls, m3u_name=p["name"])
-            total_processed += len(urls)
+            try:
+                results = manager.process_urls(urls, m3u_name=p["name"])
+                total_processed += len(urls)
+                # Count successes in this batch
+                downloaded_count += sum(1 for r in results if r.get("status") == "success")
+            except Exception as e:
+                logger.error(f"Error processing playlist {p['name']}: {e}")
             
             # CRITICAL: Check if stop was requested during processing
             if manager.stop_requested.is_set():
@@ -373,37 +407,48 @@ def execution_job():
                 break
             
         # Update Track Counts
-        playlists = db.get_playlists()
-        for p in playlists:
+        playlists_latest = db.get_playlists()
+        for p in playlists_latest:
            update_track_count_for_playlist(p)
 
+    except Exception as e:
+        logger.error(f"Execution fatal error: {e}")
+    finally:
+        # Always log to history if we did something
         duration = time.time() - start_time
         
-        # Log Global History? Or per playlist? 
-        # User requested per execution job history? 
-        # "Historial de Ejecuciones": "Hace 2 horas - 5 canciones nuevas".
-        # Let's log a summary entry "Global Sync"
-        
-        db.add_history_entry(
-            playlist_name="Global Sync",
-            status="completed",
-            downloaded=manager.status.get("downloaded", 0), # Rough estimate from last status
-            total=total_processed,
-            duration=duration
-        )
-        
-        logger.info(f"Execution finished. Processed {total_processed} URLs.")
-
-    except Exception as e:
-        logger.error(f"Execution error: {e}")
+        # Don't log if zero items processed (unless it was an error? But we want to avoid spam if empty)
+        if total_processed > 0 or duration > 5:
+            try:
+                db.add_history_entry(
+                    playlist_name="Scheduled Sync",
+                    status="completed",
+                    downloaded=downloaded_count,
+                    total=total_processed,
+                    duration=duration
+                )
+                logger.info(f"Scheduled execution finished. Processed {total_processed} URLs.")
+            except Exception as h_err:
+                logger.error(f"Failed to save history: {h_err}")
 
 def update_track_count_for_playlist(p):
     manager.reload_config()
     output_dir = Path(manager.config.get("output_dir", "./downloads"))
     
     m3u_name = p["name"]
-    safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
-    m3u_path = output_dir / f"{safe_name}.m3u8"
+    
+    import unicodedata
+    nfkd_form = unicodedata.normalize('NFKD', m3u_name)
+    ascii_name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    
+    safe_name = "".join(c for c in ascii_name if c.isalnum() or c in (' ', '-', '_')).strip()
+    if not safe_name: safe_name = "Playlist_Unknown"
+    
+    # Check in subfolder first (New Structure)
+    m3u_path = output_dir / safe_name / f"{safe_name}.m3u8"
+    if not m3u_path.exists():
+        # Fallback to old root structure
+        m3u_path = output_dir / f"{safe_name}.m3u8"
     
     count = 0
     if m3u_path.exists():
@@ -424,12 +469,22 @@ def get_playlist_tracks(id: str):
         raise HTTPException(status_code=404, detail="Playlist not found")
 
     m3u_name = target_pl["name"]
-    safe_name = "".join(c for c in m3u_name if c.isalnum() or c in (' ', '-', '_')).strip()
+    
+    import unicodedata
+    nfkd_form = unicodedata.normalize('NFKD', m3u_name)
+    ascii_name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    
+    safe_name = "".join(c for c in ascii_name if c.isalnum() or c in (' ', '-', '_')).strip()
+    if not safe_name: safe_name = "Playlist_Unknown"
     
     manager.reload_config()
     output_dir = Path(manager.config.get("output_dir", "./downloads"))
     
-    m3u_path = output_dir / f"{safe_name}.m3u8"
+    # Check in subfolder first (New Structure)
+    m3u_path = output_dir / safe_name / f"{safe_name}.m3u8"
+    if not m3u_path.exists():
+        # Fallback to old root structure
+        m3u_path = output_dir / f"{safe_name}.m3u8"
     
     if not m3u_path.exists():
         return []

@@ -53,6 +53,7 @@ h1 {
     margin: 0;
     background: var(--primary-gradient);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     letter-spacing: -1px;
 }
@@ -834,6 +835,10 @@ h2 {
     border-radius: 12px;
     /* Softer corners */
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    /* Responsive Wrap */
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .list-item:hover {
@@ -849,5 +854,94 @@ h2 {
 
     #btn-add-pl {
         width: 100%;
+    }
+}
+
+/* === Mobile Responsive Updates === */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+
+    .container {
+        gap: 16px;
+    }
+
+    /* Navbar Stacking */
+    .navbar {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+        text-align: center;
+    }
+
+    .nav-links {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        /* 2x2 grid for buttons */
+        gap: 8px;
+    }
+
+    .tab-btn {
+        width: 100%;
+        text-align: center;
+        padding: 10px;
+        font-size: 0.9rem;
+    }
+
+    h1 {
+        font-size: 1.8rem;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .version-badge {
+        font-size: 0.7rem;
+    }
+
+    .status-badge {
+        width: 100%;
+        text-align: center;
+        box-sizing: border-box;
+    }
+
+    /* Form Rows Stack */
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .card {
+        padding: 20px;
+    }
+
+    /* Dashboard Actions Stack */
+    .actions {
+        flex-direction: column;
+    }
+
+    .actions button {
+        width: 100%;
+    }
+
+    /* Hide less important stats on very small screens if needed, 
+       but usually stacking is enough */
+    .stats-row {
+        flex-direction: column;
+        gap: 4px;
+        align-items: center;
+    }
+
+    .list-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .list-item .actions {
+        width: 100%;
+        margin-top: 5px;
+        justify-content: flex-end;
     }
 }
