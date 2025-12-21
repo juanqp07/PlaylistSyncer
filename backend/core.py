@@ -566,7 +566,10 @@ class DownloaderManager:
                 if is_url_mode and not is_batch:
                     # Native Mode (Single Spotify Playlist/URL)
                     cmd.extend(["--save-file", str(save_file)])
-                    cmd.extend(["--m3u", m3u_arg])
+                    # CRITICAL: Do NOT use native --m3u. SpotDL mangles absolute paths (creates /app/app/...).
+                    # We rely 100% on our robust manual M3U generator in _run_cmd.
+                    # cmd.extend(["--m3u", m3u_arg])
+                    run_cmd_m3u_arg = m3u_arg
                 else:
                     # Manual Mode (Titles or Batch)
                     run_cmd_m3u_arg = m3u_arg

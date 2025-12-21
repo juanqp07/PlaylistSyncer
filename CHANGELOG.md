@@ -2,6 +2,10 @@ Registro de Cambios
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.7.6] - 2025-12-21
+### Corregido
+- **Error Crítico M3U**: Desactivada la generación nativa de M3U de SpotDL para evitar un bug de la librería que genera rutas corruptas (`/app/app/...`) en Docker. Ahora se usa el generador manual robusto para todas las descargas.
+
 ## [1.7.5] - 2025-12-21
 ### Corregido
 - **Config Path Persistence**: Solución definitiva al error de rutas duplicadas (`/app/app/`). Ahora el sistema depura activamente el archivo de configuración cada vez que se carga o se guarda, corrigiendo automáticamente cualquier ruta corrupta heredada.
@@ -36,6 +40,10 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 - **Crash de Inicio**: Reparado error de indentación crítico en `core.py`.
 - **Rutas**: Solucionado error `FileNotFoundError` asegurando la creación recursiva de directorios en tiempo de ejecución.
 - **Nombres Seguros**: Forzado de nombres de carpeta ASCII para evitar problemas de compatibilidad con emojis/acentos en el sistema de archivos.
+
+## [1.6.1] - 2025-12-21
+### Corregido
+- **Error Crítico M3U**: Desactivada la generación nativa de M3U de SpotDL para evitar un bug de la librería que genera rutas corruptas (`/app/app/...`) en Docker. Ahora se usa el generador manual robusto para todas las descargas.
 
 ## [1.6.0] - 2025-12-14
 ### Añadido
